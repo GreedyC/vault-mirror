@@ -29,7 +29,7 @@ vault-mirror now works on Windows and Linux as it does on a Mac. Notes are still
 ### Known limits
 
 - Tested on macOS (Apple Silicon), Windows (x64) and Linux (x64), on GitHub's hosted machines. Intel Macs, Windows on ARM, Linux on ARM, musl Linux (Alpine), WSL and containers are not yet verified.
-- The largest vault run on Windows and Linux has 180 notes.
+- The largest vault run on Windows and Linux has about 170 notes.
 - A note written entirely in a language without spaces between words (for example Japanese) is counted as empty and left out, on every system. `status --list` names it.
 - Windows: one program cannot send Ctrl+C to another, so the acceptance step for Ctrl+C in the middle of a sync is skipped there. A forced stop in the middle of a sync is tested.
 - Windows, not observable on CI: whether `sync --detach` shows a console window on a desktop, and notes that OneDrive shows but has not downloaded.

@@ -411,7 +411,7 @@ Version 0.1.1. **Tested on macOS (Apple Silicon), Windows (x64) and Linux (x64)*
 
 "Tested" means three things ran on each system and passed. The unit suite, on Node 20, 22 and 24. A first run as a new user has it, on Node 20, 22 and 24: install with the line above, then `doctor`, `init`, `sync`, `status`, `search`, an edit, a delete and `rebuild`, on a vault whose path has a space and whose notes have accented and Japanese names. And a 34-step acceptance script that includes the read-only checks, a forced stop in the middle of a sync, and two syncs racing. After every command a checksum listing of the vault is compared: no file in it changed. Windows cannot send Ctrl+C from one program to another, so that one step is skipped there and says so; a forced stop is tested on all three.
 
-The largest vault run on Windows and Linux so far has 180 notes; the larger runs in [docs/BENCHMARKS.md](docs/BENCHMARKS.md) are from one Mac. Windows on ARM and musl Linux have no native ruvector build, so a built-in exact engine takes over there and says so; neither has been run.
+The largest vault run on Windows and Linux so far has about 170 notes; the larger runs in [docs/BENCHMARKS.md](docs/BENCHMARKS.md) are from one Mac. Windows on ARM and musl Linux have no native ruvector build, so a built-in exact engine takes over there and says so; neither has been run.
 
 ### On Windows
 
@@ -426,7 +426,7 @@ What CI runs on GitHub's hosted Windows machines (x64), and passes:
 - **A note another program holds** (a virus scanner, an editor) is skipped, named in plain words, and `status` says "not yet" until the next sync reads it.
 - **A sync that is stopped by force** leaves the index readable, and the next sync carries on. Two syncs at once never both write.
 
-Not yet tried on Windows, by anyone: OneDrive files that are shown but not downloaded; whether `sync --detach` flashes a window on a real desktop; Ctrl+C in the middle of a sync (one program cannot send it to another, so CI cannot); a vault of more than 180 notes; and Windows on ARM, where ruvector has no native build and the built-in exact engine is meant to take over.
+Not yet tried on Windows, by anyone: OneDrive files that are shown but not downloaded; whether `sync --detach` flashes a window on a real desktop; Ctrl+C in the middle of a sync (one program cannot send it to another, so CI cannot); a vault of more than about 170 notes; and Windows on ARM, where ruvector has no native build and the built-in exact engine is meant to take over.
 
 Planned, with no dates:
 

@@ -46,7 +46,7 @@ export async function rebuildCommand(args, ui) {
   const seconds = Math.round((Date.now() - started) / 100) / 10;
   ui.out(`Rebuilt the index from saved passages in ${duration(seconds)} (${plural(loaded.manifest.totals.passages, 'passage')}). Nothing was re-read.`);
   const quiet = { ...ui, warn() {} };
-  const s = await computeStatus(ctx, {}, quiet);
+  const s = await computeStatus(ctx, { engine: r.engine }, quiet);
   const pending = s.counts.pending.new + s.counts.pending.changed + s.counts.pending.removed;
   let next = null;
   if (s.inStep) ui.out('In step: yes.');

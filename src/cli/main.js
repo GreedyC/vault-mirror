@@ -36,6 +36,7 @@ status:   --verify  --list  --screen
 rebuild:  --full  --yes
 `;
 
+/** @type {Record<string, any>} */
 const COMMON = { json: { type: 'boolean' }, quiet: { type: 'boolean' }, 'no-color': { type: 'boolean' }, help: { type: 'boolean' }, version: { type: 'boolean' } };
 /** @type {Record<string, Record<string, any>>} */
 const OPTIONS = {

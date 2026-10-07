@@ -20,7 +20,7 @@ test('the link keeps .md, uses the full vault path, and carries the heading as %
   assert.equal(buildLink({ vaultParam: 'My Vault', vaultPath: 'A & B (v2).md' }), 'obsidian://open?vault=My%20Vault&file=A%20%26%20B%20%28v2%29.md');
   const params = new URL(/** @type {string} */ (link)).searchParams;
   assert.deepEqual([...params.keys()], ['vault', 'file'], 'only vault and file are ever emitted');
-  assert.equal(buildLink({ vaultParam: 'v', vaultPath: 'a b.md' }), 'obsidian://open?vault=v&file=a%20b.md', 'a no-break space is written as an ordinary space');
+  assert.equal(buildLink({ vaultParam: 'v', vaultPath: 'a\u00a0b.md' }), 'obsidian://open?vault=v&file=a%20b.md', 'a no-break space is written as an ordinary space');
   assert.equal(buildLink({ vaultParam: 'v', vaultPath: 'Café.md' }), `obsidian://open?vault=v&file=${encodeURIComponent('Café.md')}`, 'NFC');
 });
 

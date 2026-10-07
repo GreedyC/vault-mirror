@@ -1,6 +1,6 @@
 # vault-mirror: build spec
 
-Spec version 3, Oct 6, 2026. Build target: `v0.1.0`. Version 2 replaced version 1 after two independent reviews. Version 3 folds in a source-level study of ruvector 0.3.3 and of Obsidian's own code, whose key claims a second reviewer re-ran. The review logs at the end list every finding and what was done with it.
+Spec version 3, Oct 6, 2026. Build target: `v0.1.0`. The section "Build log for v0.1.0" near the end records what the build added and changed. Version 2 replaced version 1 after two independent reviews. Version 3 folds in a source-level study of ruvector 0.3.3 and of Obsidian's own code, whose key claims a second reviewer re-ran. The review logs at the end list every finding and what was done with it.
 
 **What it is.** A small Node command-line tool that keeps one Obsidian vault and one local ruvector index in step, 1:1, so an AI agent (Claude Code, Codex) searches the index first and reads the passages it returns, and falls back to searching the vault files when those passages do not answer the question. It never needs to read the whole vault. The vault is the library; the index is the librarian.
 
@@ -923,6 +923,51 @@ Everything here can be met by an unattended build on macOS arm64 with one Node v
 3. **Other machines behave like the build machine.** Windows, Intel Macs, 8 GB laptops, cloud-offloaded vaults and agent shells that kill long commands are unmeasured. Guards: `doctor`'s own speed estimate, a worker count that is automatic and conservative, a first sync at low priority, a sync that survives sleep, pause and kill, `--detach`, "not downloaded is not deleted", and docs that promise only what was run.
 
 One more, named so nobody builds a claim on it: **the index finds the right note about two times in three when a question is asked in other words** (one small test, one author). The tool's answer is the agent rule's fallback to searching the files, and an honest README; it is not a number to print.
+
+---
+
+## Build log for v0.1.0: what the build added to version 3, and what it changed
+
+Version 3 is what was built. This section records every place the build went beyond it or departed from it, with the reason. Where this section and the text above differ, this section describes the code.
+
+### Added: speed and first-try answers
+
+A search has to be answered in one tool call, fast. Every extra round trip by the agent costs seconds, so a search returns enough to answer the first time.
+
+| # | Addition | Detail |
+| --- | --- | --- |
+| A1 | **Several wordings in one call.** `vault-mirror search "q1" "q2" "q3"` | Each wording is embedded (one model load), each is searched, the hits are merged, and one ranked list comes back with the best passage per note. The JSON carries `queries` (all wordings) beside `query` (the first). Asking in two or three wordings is the cheapest large gain in finding the right note |
+| A2 | **The full passage text in every result.** | Each result has `text` (the whole stored passage, secrets masked) beside `snippet` (at most 400 characters). Passages are short by design, so the agent can usually answer without opening a file. Human output prints the full passage |
+| A3 | **`resultCount` defaults to 8** (was 5) | A compact list that is still enough to answer from |
+| A4 | **A question is embedded at the smallest padding that gives the same vector** (16, 32 or 64 instead of the passage padding) | Bit-identical vectors, measured; a short question costs about a quarter of the time. A search never starts the reader pool |
+| A5 | **The engine probe runs while the model loads.** | The child process that opens the existing engine file (section 8) is started first and awaited after the question is embedded, so its cost overlaps the model load |
+| A6 | **`status` counts the engine through the probe alone** | When the engine's stamp is current, `status` reads "Passages in ruvector" from the probe child and never loads the engine or the model in its own process. It loads the engine only to bring a stale one in step, or for `--verify` |
+| A7 | **Incremental engine apply** (was `[S]`) | After a small sync (512 new passages or fewer, 400 removed ids or fewer), when the engine sits at exactly the stamp the sync started from, just those ids are deleted and inserted. The count is checked before the stamp is written. Anything else is a full reload into a new file. **A sync in which any note left the index (a delete, a rename, `index: false`, a new `exclude`) always reloads into a new file:** a deleted id can linger in an engine file's freed pages, and acceptance step 12 requires that a removed note's name appears nowhere in the index folder |
+| A8 | **Timing breakdown in `search --json`** | `timings: { syncMs, modelAndEmbedMs, engineMs, probeMs, searchMs, readMs }` and `engine` (which engine answered) |
+| A9 | **Alias prefix** (was `[S]`) | Built before the chunker freeze: the first passage of a note carries `Title (also: alias one, alias two)`, capped at 12 tokens. An alias equal to the title is dropped |
+
+Not built in 0.1.0, and why: **an exact-words list** (passages that contain the question's distinctive words, shown as a separate short list, never fused with the meaning ranking). It is `[v0.1.1]`: it needs its own measurement on reworded and exact questions, and a proven build was not put at risk for it.
+
+### Changed, with the reason
+
+| # | Version 3 said | The build does | Why |
+| --- | --- | --- | --- |
+| C1 | The stamp counter goes up at every manifest write | It goes up whenever the set of passages changes. A bookkeeping write (a new date on an unchanged note, the left-out list, the last-run line) keeps the stamp | Otherwise a sync that changed nothing would force the next search to reload the whole engine |
+| C2 | `src/vault/frontmatter.js` | `src/chunker/frontmatter.js` | The chunker imports nothing outside its folder, and a static test holds it to that |
+| C3 | A `put` record holds `path`, `sha256`, `title`, `passages` | It also holds `size`, `mtimeMs` and `fip` (the folder-in-prefix flag), and a passage also holds `heads` (its heading chain as written) and `rep` (the heading repeats in the note) | Recovery folds a record into the manifest without re-reading the note; a link is built at print time from the stored headings |
+| C4 | A manifest note entry has `log` | It also has `vec`, the position of the note's first vector. A note's vectors are always contiguous | The engine is rebuilt from the manifest and `vectors.f32` alone, without parsing the text log |
+| C5 | Greedy packing | Greedy packing, then the lines of the last two pieces of a section are shared evenly when the last piece would be under 40% of the budget, preferring a cut that is not between two list items or table rows | A two-line leftover piece carries little meaning of its own and was outranking the passage that held the answer |
+| C6 | (not covered) | A line that is only a horizontal rule (`---`, `***`, `___`) is dropped | It carries no words |
+| C7 | `exclude`: "folder or file prefixes" | An entry matches a whole path or a folder and everything below it (`Templates` matches `Templates/a.md`, not `Templates old/a.md`) | A raw string prefix leaves out folders nobody named |
+| C8 | A nested vault "is skipped whole and counted as left out" | Its notes are listed and each is counted as left out (`nested-vault`); none is read. A symbolic link to a folder is counted with the other files | So that notes on disk = notes in the index + notes left out always adds up |
+| C9 | A lock is "held until the process exits" | The same, and asking for a lock this process already holds returns at once | A search that syncs first and then opens the engine would otherwise wait for itself |
+| C10 | A sync "that has enough work to start the reader pool" lowers its priority | Any sync of 32 passages or more does, also on a small machine that runs no pool | The promise is about the person's computer, not about the pool |
+| C11 | `[S]` table header repetition, `[S]` crashing-note marker | Not built | Each waits for a later chunker version or release; neither is needed for a correct index |
+| C12 | Edge-case fixtures are files in `tests/fixtures/vault` | Notes whose names some systems cannot check out (`? : " \|`, a trailing space) and a note that looks like it holds a key are written at test time by `tests/helpers/make-notes.mjs` | A public repository must clone everywhere and must not trip secret scanning |
+| C13 | Error table of section 14 | Two more codes: `VM_E_USAGE` (exit 2, a flag or argument that was not understood) and `VM_E_STOPPED` (exit 130, "Stopped at 812 of 1,240 notes." / "Run it again to continue.") | Every exit goes through the same table |
+| C14 | `tsc --noEmit` | Runs with `strict` off | JSDoc types cover the public shapes; a strict pass is `[v0.1.1]` |
+| C15 | Window test "for 200 sampled passages" | The sample is taken by chunking the vault again with the shipped chunker and counter, densest first, not by reading the stored index | The embedded text (prefix plus body) is what must fit the window, and only the body is stored |
+| C16 | `rebuild --full` "asks for confirmation unless `--yes`" | The same; when there is no terminal to ask on (an agent's shell, `--json`), it stops with a usage message that names `--yes` | It must never hang waiting for an answer nobody can give |
 
 ---
 

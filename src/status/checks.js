@@ -19,7 +19,7 @@ const LEFT_OUT_KEYS = { excluded: 'excluded', 'obsidian-excluded': 'obsidianExcl
 
 /**
  * @param {import('../sync/run.js').Context} ctx
- * @param {{ verify?: boolean }} opts
+ * @param {{ verify?: boolean, engine?: import('../engine/engine.js').Engine }} opts
  * @param {import('../cli/output.js').Ui} ui
  */
 export async function computeStatus(ctx, opts, ui) {
@@ -43,7 +43,12 @@ export async function computeStatus(ctx, opts, ui) {
   let passagesInEngine = 0; let engineCurrent = false;
   /** @type {import('../engine/engine.js').Engine | null} */
   let engine = null;
-  if (loaded && manifest && passagesRecorded > 0) {
+  if (loaded && manifest && passagesRecorded > 0 && opts.engine) {
+    // This process already holds the engine open (a rebuild just made it): count it directly.
+    engine = opts.engine;
+    passagesInEngine = await engine.count();
+    engineCurrent = engineStamp(ctx.indexDir)?.stamp === manifest.stamp || engine.name === 'exact';
+  } else if (loaded && manifest && passagesRecorded > 0) {
     const stamp = engineStamp(ctx.indexDir);
     const dimensions = Number(manifest.embedding.dimensions);
     let needLoad = Boolean(opts.verify) || !stamp || stamp.stamp !== manifest.stamp;

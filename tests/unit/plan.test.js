@@ -178,10 +178,10 @@ test('Obsidian excludes: a missing or broken app.json is ignored, with one warni
 });
 
 test('two names with one key: the first by raw name is indexed, the other is listed', () => {
-  assert.equal(noteKeyOf('Café/a b.md'), 'Café/a b.md');
+  assert.equal(noteKeyOf('Café/a\u00a0b.md'), 'Café/a b.md');
   const root = tmpDir('dup');
   fs.writeFileSync(path.join(root, 'a b.md'), 'plain space');
-  fs.writeFileSync(path.join(root, 'a b.md'), 'no-break space');
+  fs.writeFileSync(path.join(root, 'a\u00a0b.md'), 'no-break space');
   const w = walkVault(root);
   if (w.notes.length + w.leftOut.length === 2) {
     assert.equal(w.notes.length, 1);

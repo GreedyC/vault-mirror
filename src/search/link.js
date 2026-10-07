@@ -37,7 +37,7 @@ export function headingPart(heads, repeats) {
 export function buildLink(o) {
   if (!o.vaultParam) return null;
   if (o.vaultPath.includes('#')) return null; // no Obsidian link can open such a file
-  const file = o.vaultPath.normalize('NFC').replace(/ /g, ' ');
+  const file = o.vaultPath.normalize('NFC').replace(/\u00a0/g, ' ');
   const heading = o.recovered ? null : headingPart(o.heads || [], Boolean(o.repeats));
   return `obsidian://open?vault=${encodeStrict(o.vaultParam)}&file=${encodeStrict(heading ? `${file}#${heading}` : file)}`;
 }

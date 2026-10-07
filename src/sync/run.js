@@ -299,7 +299,9 @@ export async function runSync(ctx, opts, ui) {
       if (manifest.totals.passages > 0 && (!eng || eng.stamp !== manifest.stamp)) {
         await embedder.shutdown(); // the readers are done; free their memory before the engine loads
         try {
-          const delta = addRows && eng && eng.stamp === stampAtStart ? { fromStamp: stampAtStart, removeIds, addRows } : null;
+          // Apply just the changed notes only when no note left the index: a deleted id can linger in an
+          // engine file's freed pages, and a removed note's name must appear nowhere. A fresh file has no history.
+          const delta = addRows && eng && eng.stamp === stampAtStart && leavingKeys.length === 0 ? { fromStamp: stampAtStart, removeIds, addRows } : null;
           const r = await ensureEngine({ indexDir: ctx.indexDir, loaded: { manifest, dataDir }, dimensions: embedder.dimensions, quiet: true, delta });
           for (const n of r.notices) ui.warn(n);
           for (const w of r.warnings) ui.warnings.push(w);

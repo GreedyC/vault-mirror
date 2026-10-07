@@ -17,7 +17,7 @@ function fill(parts, glue, budget, count, splitMore) {
     if (n > budget) {
       flush();
       const smaller = splitMore(part);
-      if (smaller.length <= 1) out.push(part); else out.push(...fill(smaller, smaller.glue || ' ', budget, count, (p) => splitMore(p)));
+      if (smaller.length <= 1) out.push(part); else out.push(...fill(smaller, /** @type {any} */ (smaller).glue ?? ' ', budget, count, splitMore));
       continue;
     }
     if (used + n > budget) flush();

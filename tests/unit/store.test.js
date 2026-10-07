@@ -145,14 +145,17 @@ test('an unknown manifest schema stops with a message, never guesses', () => {
 test('lock: exclusive acquire, wait, release', async () => {
   const s = setup();
   const file = path.join(s.indexDir, 'sync.lock');
-  const a = await acquireLock(file, { command: 'sync', waitMs: 0 });
-  assert.ok(a.stillOurs());
+  // Another live process holds it (this test's parent stands in for that process).
+  fs.writeFileSync(file, JSON.stringify({ pid: process.ppid, token: 'theirs', command: 'sync', startedAt: Date.now() }));
   let waited = false;
   await assert.rejects(acquireLock(file, { command: 'sync', waitMs: 120, pollMs: 20, onWait: () => { waited = true; } }), (e) => e instanceof VmError && e.code === 'VM_E_BUSY' && e.exitCode === 6);
   assert.ok(waited);
-  setTimeout(() => a.release(), 60);
+  assert.equal(readLock(file).token, 'theirs', 'a live owner is never taken over');
+  setTimeout(() => fs.rmSync(file), 60); // the other run finishes
   const b = await acquireLock(file, { command: 'sync', waitMs: 2000, pollMs: 20 });
   assert.ok(b.stillOurs());
+  const again = await acquireLock(file, { command: 'sync', waitMs: 0 });
+  assert.equal(again.token, b.token, 'asking for a lock this process already holds returns at once');
   b.release();
   assert.ok(!fs.existsSync(file));
 });

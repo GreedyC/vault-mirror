@@ -17,7 +17,7 @@ import { readObsidianExcludes } from './obsidian-registry.js';
 
 /** The manifest key for a vault-relative path: forward slashes, NFC, no-break spaces as ordinary spaces. @param {string} rel */
 export function noteKeyOf(rel) {
-  return rel.split(path.sep).join('/').normalize('NFC').replace(/ /g, ' ');
+  return rel.split(path.sep).join('/').normalize('NFC').replace(/\u00a0/g, ' ');
 }
 
 /** @param {string} key @param {string[]} prefixes */

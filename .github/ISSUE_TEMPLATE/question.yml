@@ -1,0 +1,20 @@
+name: A question, or help getting set up
+description: Ask anything about vault-mirror. No question is too basic
+labels: [question]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Ask away. **Please do not paste your notes, or attach an index folder.** If a note is needed to explain the question, write a small invented one.
+  - type: textarea
+    id: question
+    attributes:
+      label: What would you like to know, or what are you stuck on?
+    validations:
+      required: true
+  - type: textarea
+    id: doctor
+    attributes:
+      label: Output of `vault-mirror doctor` (if it is installed)
+      description: Counts and versions only. No note text. Leave this empty if you have not installed it yet.
+      render: text

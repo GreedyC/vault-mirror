@@ -22,6 +22,7 @@ The first release.
 - A safety screen that flags passages that look like they hold a key or password and masks them in results.
 - `--json` on every command: one object, a stable shape, plain error codes with one next action each.
 - Leaving notes out: `exclude` folders, `index: false` in a note's properties, and Obsidian's own "Excluded files" setting.
+- Contribution and governance docs: `CONTRIBUTING.md` (pull requests from a fork, approved by a maintainer, and the hard lines no change may cross), `GOVERNANCE.md`, `.github/CODEOWNERS`, a pull request checklist and a question form.
 
 ### Fixed before the tag
 

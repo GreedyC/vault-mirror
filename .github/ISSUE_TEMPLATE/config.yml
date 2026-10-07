@@ -1,8 +1,5 @@
 blank_issues_enabled: false
 contact_links:
-  - name: A question, or help getting set up
-    url: https://github.com/HeroForgeAI/vault-mirror/discussions
-    about: Ask in Discussions. No question is too basic.
   - name: A security problem
     url: https://github.com/HeroForgeAI/vault-mirror/security/advisories/new
     about: Please report security problems privately, not in a public issue.

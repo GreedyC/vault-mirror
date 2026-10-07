@@ -407,7 +407,11 @@ vault-mirror stands on other people's work.
   <img alt="Verified on macOS arm64" src="https://img.shields.io/badge/verified%20on-macOS%20arm64-blue">
 </p>
 
-- Bugs and ideas: [CONTRIBUTING.md](CONTRIBUTING.md). Please never attach your own notes or an index folder to an issue.
+**Contributing.** Ideas and fixes are welcome. Everything comes in as a pull request from your own fork, and a maintainer approves it before it merges.<br>
+How to do that, and the lines no change may cross: [CONTRIBUTING.md](CONTRIBUTING.md).<br>
+Who decides, and how releases work: [GOVERNANCE.md](GOVERNANCE.md).
+
+- Bugs, ideas and questions: open an issue. Please never attach your own notes or an index folder to one.
 - Security reports: [SECURITY.md](SECURITY.md).
 - Changes by release: [CHANGELOG.md](CHANGELOG.md).
-- [MIT](LICENSE). Maintained by Mak Allen at [HeroForgeAI](https://github.com/HeroForgeAI).
+- [MIT](LICENSE). Maintained by Mak Allen ([@HF-teamdev](https://github.com/HF-teamdev)) and Mark Allen ([@mamd69](https://github.com/mamd69)) at [HeroForgeAI](https://github.com/HeroForgeAI).

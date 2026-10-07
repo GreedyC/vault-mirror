@@ -75,6 +75,8 @@ const status = many(['status', '--json']);
 const inStep = JSON.parse(status.last.stdout).inStep;
 const syncNothing = many(['sync', '--json']);
 const searchCold = many(['search', 'when does the ferry rope need checking', '--no-sync', '--json']);
+const searchNoExact = many(['search', 'when does the ferry rope need checking', '--no-sync', '--json', '--no-exact-words']);
+const searchPhrase = many(['search', 'when does "the ferry rope" need checking', '--no-sync', '--json']);
 const searchSync = many(['search', 'when does the ferry rope need checking', '--json']);
 const searchThree = many(['search', 'when does the ferry rope need checking', 'ferry rope inspection', 'how often to check the mooring line', '--no-sync', '--json']);
 const rebuild = vm(['rebuild', '--json']);
@@ -90,12 +92,14 @@ const out = {
   engineFirstLoadMs: Math.round(firstLoad.ms), inStep,
   statusMs: status.medianMs, syncNothingChangedMs: syncNothing.medianMs,
   searchColdNoSyncMs: searchCold.medianMs, searchColdNoSyncBreakdown: JSON.parse(searchCold.last.stdout).timings,
+  searchNoExactWordsMs: searchNoExact.medianMs, searchNoExactWordsBreakdown: JSON.parse(searchNoExact.last.stdout).timings,
+  searchQuotedPhraseMs: searchPhrase.medianMs, searchQuotedPhraseBreakdown: JSON.parse(searchPhrase.last.stdout).timings, exactWordsListed: JSON.parse(searchCold.last.stdout).exactWords.length,
   searchWithQuickSyncMs: searchSync.medianMs, searchWithQuickSyncBreakdown: JSON.parse(searchSync.last.stdout).timings,
   searchThreeWordingsMs: searchThree.medianMs, searchThreeBreakdown: JSON.parse(searchThree.last.stdout).timings,
   rebuildFromSidecarMs: Math.round(rebuild.ms), oneEditSyncMs: Math.round(oneEdit.ms), oneEditJson: (() => { try { const j = JSON.parse(oneEdit.stdout); return { updated: j.counts.updated, embedded: j.passages.embedded, seconds: j.seconds }; } catch { return oneEdit.stdout.slice(0, 200); } })(),
   inStepAfterEdit: (() => { try { return JSON.parse(afterEdit.stdout).inStep; } catch { return null; } })(),
   statusVerifyMs: Math.round(verify.ms), verifyInStep: (() => { try { return JSON.parse(verify.stdout).inStep; } catch { return null; } })(),
-  indexFolderMB: Math.round(du(indexDir) / 1048576), engineFileMB: Math.round(du(path.join(indexDir, 'engine')) / 1048576),
+  indexFolderMB: Math.round(du(indexDir) / 1048576), exactWordsTableMB: +(fs.statSync(path.join(indexDir, 'words.bin')).size / 1048576).toFixed(2), engineFileMB: Math.round(du(path.join(indexDir, 'engine')) / 1048576),
   peakMemoryMB: { search: rss(['search', 'ferry rope', '--no-sync', '--json']), status: rss(['status', '--json']), syncNothingChanged: rss(['sync', '--json']) },
 };
 console.log(JSON.stringify(out, null, 2));

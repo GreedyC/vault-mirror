@@ -6,6 +6,7 @@ import readline from 'node:readline';
 import { loadContext } from '../context.js';
 import { loadManifest } from '../../store/manifest.js';
 import { ensureEngine } from '../../engine/build.js';
+import { wordsFor } from '../../words/store.js';
 import { computeStatus } from '../../status/checks.js';
 import { runSync, printSyncSummary } from '../../sync/run.js';
 import { setLogDir } from '../../log.js';
@@ -43,6 +44,7 @@ export async function rebuildCommand(args, ui) {
   if (!loaded || loaded.manifest.totals.passages === 0) throw new VmError('VM_E_NOT_SYNCED');
   const r = await ensureEngine({ indexDir: ctx.indexDir, loaded, dimensions: Number(loaded.manifest.embedding.dimensions), forceRebuild: true, quiet: true });
   for (const n of r.notices) ui.warn(n);
+  wordsFor(ctx.indexDir, r.loaded, { save: true, fresh: true }); // the exact-words table is made again from saved passages too
   const seconds = Math.round((Date.now() - started) / 100) / 10;
   ui.out(`Rebuilt the index from saved passages in ${duration(seconds)} (${plural(loaded.manifest.totals.passages, 'passage')}). Nothing was re-read.`);
   const quiet = { ...ui, warn() {} };

@@ -17,6 +17,7 @@ import { loadManifest, newManifest, saveManifest, switchCurrent, nextDataName, c
 import { createDataDir, openSidecar } from '../store/sidecar.js';
 import { recover } from '../store/recover.js';
 import { tidyRewrite, removeOrphans } from '../store/rewrite.js';
+import { wordsFor, wordsAtStamp, dropWords } from '../words/store.js';
 import { ensureEngine, engineStamp } from '../engine/build.js';
 import { loadedVersions } from '../engine/ruvector-loader.js';
 import { passageId } from '../engine/engine.js';
@@ -34,6 +35,8 @@ import { CHUNKER_VERSION, TOOL_VERSION } from '../version.js';
  * @property {{ real: string, name: string, opened: boolean }} vault
  * @property {string} indexDir
  */
+
+const WORDS_SAVE_EVERY_MS = 30000;
 
 /** The settings that change chunk output, and their hash. @param {Context} ctx @param {import('../embed/embedder.js').Embedder} embedder */
 export function chunkerBlock(ctx, embedder) {
@@ -160,6 +163,7 @@ export async function runSync(ctx, opts, ui) {
         const dataDir = path.join(ctx.indexDir, dataName);
         const manifest = newManifest({ dataName, vault: { name: ctx.vault.name, path: ctx.vault.real, pathHash: path.basename(ctx.indexDir).slice(-8) }, chunker: chunkerNow, embedding: embeddingNow, engine: engineBlock() });
         manifest.sidecar.logBytes = createDataDir(dataDir, { embedding: embeddingNow, chunker: chunkerNow });
+        dropWords(ctx.indexDir); // every note is read again, so the exact-words table starts again too
         saveManifest(dataDir, manifest);
         switchCurrent(ctx.indexDir, dataName);
         removeOrphans(ctx.indexDir, dataName);
@@ -218,6 +222,13 @@ export async function runSync(ctx, opts, ui) {
       /** @type {import('../engine/engine.js').Row[] | null} */
       let addRows = plan.passagesToEmbed <= 512 ? [] : null;
       const fenced = () => { if (!lock.stillOurs()) throw new VmError('VM_E_LOCK_LOST'); };
+      // The exact-words table follows the saved passages. It is a copy that can always be made again,
+      // so a failure here never fails the sync: the next search, status or sync brings it in step.
+      let wordsSavedAt = Date.now();
+      const saveWords = () => {
+        try { fenced(); wordsFor(ctx.indexDir, { manifest, dataDir }, { save: true }); wordsSavedAt = Date.now(); }
+        catch (e) { if (e instanceof VmError) throw e; debug(`the exact-words table was not saved: ${String(/** @type {any} */ (e)?.message).slice(0, 160)}`); }
+      };
 
       for (const t of plan.touched) { Object.assign(manifest.notes[t.key], { size: t.size, mtimeMs: t.mtimeMs, racy: t.racy }); bookkeeping = true; }
       if (JSON.stringify(manifest.leftOut) !== JSON.stringify(plan.leftOutKept)) { manifest.leftOut = plan.leftOutKept; bookkeeping = true; }
@@ -287,6 +298,7 @@ export async function runSync(ctx, opts, ui) {
                 manifest.sidecar.logBytes = side.logBytes; manifest.sidecar.vectors = side.vectors;
                 flaggedNotes += puts.filter((p) => p.record.passages.some((x) => x.flags.includes('possible-secret'))).length;
                 saveManifest(dataDir, manifest);
+                if (Date.now() - wordsSavedAt >= WORDS_SAVE_EVERY_MS) saveWords(); // a long first sync: searches meanwhile find exact words too
               }
               embedded += size; notesDone += batch.length;
               tick(0, true);
@@ -318,6 +330,7 @@ export async function runSync(ctx, opts, ui) {
         fenced();
         ({ manifest, dataName, dataDir } = tidyRewrite(ctx.indexDir, dataName, manifest, embedder.dimensions));
       }
+      if ((manifest.totals.passages > 0 || work > 0) && !wordsAtStamp(ctx.indexDir, manifest)) saveWords();
 
       // Bring the engine in step. If the index is busy the sync still ends well: everything is saved.
       let engineNote = null;

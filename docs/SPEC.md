@@ -1,6 +1,6 @@
 # vault-mirror: build spec
 
-Spec version 3, Oct 6, 2026. Build target: `v0.1.0`. The section "Build log for v0.1.0" near the end records what the build added and changed. Version 2 replaced version 1 after two independent reviews. Version 3 folds in a source-level study of ruvector 0.3.3 and of Obsidian's own code, whose key claims a second reviewer re-ran. The review logs at the end list every finding and what was done with it.
+Spec version 3, Oct 6, 2026. Build target: `v0.1.0`. The section "Build log for v0.1.0" near the end records what the build added and changed, including the exact-words list that was added after the proof rounds. Version 2 replaced version 1 after two independent reviews. Version 3 folds in a source-level study of ruvector 0.3.3 and of Obsidian's own code, whose key claims a second reviewer re-ran. The review logs at the end list every finding and what was done with it.
 
 **What it is.** A small Node command-line tool that keeps one Obsidian vault and one local ruvector index in step, 1:1, so an AI agent (Claude Code, Codex) searches the index first and reads the passages it returns, and falls back to searching the vault files when those passages do not answer the question. It never needs to read the whole vault. The vault is the library; the index is the librarian.
 
@@ -105,6 +105,7 @@ Everything the tool writes lives under one home folder, outside every vault.
     data-0003/vectors.f32     raw Float32 vectors, 1,536 bytes each
     engine/CURRENT            {"file":"index-0007.db","stamp":"…"}
     engine/index-0007.db      ruvector, flat, cosine
+    words.bin                 the exact-words table: numbers only, made from passages.jsonl (section 8)
     sync.lock  index.lock  progress.json
     logs/sync.log  logs/debug.log  logs/last-sync.out
 ```
@@ -259,7 +260,7 @@ added 1,230 · updated 0 · renamed 0 · removed 0 · unchanged 0 · left out 10
 
 ### `search "<question>"`
 
-- Flags: `-k, --count <n>` (default 5), `--no-sync`.
+- Flags: `-k, --count <n>` (default 5), `--no-sync`, `--no-exact-words`.
 - Flow: guards; if no sync has ever completed and nothing is saved, stop with `Nothing is indexed yet. Run vault-mirror sync first.` (exit 2, `VM_E_NOT_SYNCED`); a quick sync first unless `--no-sync`, another sync is running, or the waiting work exceeds `searchAutoSyncMaxPassages` (then a one-line notice and it searches what is there); bring the engine in step with the manifest (section 8); embed the question; fetch `max(count × 8, 50)` passages; drop any hit the manifest does not know; keep the best passage per note; if fewer than `count` notes remain and the fetch came back full, fetch four times as many once and repeat; print.
 - Because the manifest is saved after every group of notes, a search during a long first sync covers everything saved so far and says so in one notice.
 - Result shape (the public contract):
@@ -293,7 +294,7 @@ added 1,230 · updated 0 · renamed 0 · removed 0 · unchanged 0 · left out 10
 | `morePassages` | How many other passages of this note also matched |
 | `flags` | `"possible-secret"` or `"possible-instruction-text"` from the screen |
 
-- JSON: `{ query, results: [...], searched: { notes, passages }, inStep, syncNotice: null | "…", tookMs }`. With `--no-sync` the vault is not looked at, but the index records whether its last sync ran to the end; after a stopped or killed sync `syncNotice` is `The last sync did not finish. This search covers what is indexed so far. Next: vault-mirror sync --detach`.
+- JSON: `{ query, queries, results: [...], exactWords: [...], searched: { notes, passages }, inStep, syncNotice: null | "…", tookMs, timings }`. `exactWords` is its own array (see "The exact-words list" below) and is empty when there is nothing new to show. With `--no-sync` the vault is not looked at, but the index records whether its last sync ran to the end; after a stopped or killed sync `syncNotice` is `The last sync did not finish. This search covers what is indexed so far. Next: vault-mirror sync --detach`.
 - Human output, per result:
 
 ```text
@@ -305,6 +306,35 @@ added 1,230 · updated 0 · renamed 0 · removed 0 · unchanged 0 · left out 10
 
 - Zero results on a synced index: `No passages matched. The index holds 1,230 notes. Try other words.` Exit 0.
 - Search runs log a count and duration only. The question text is never logged.
+
+#### The exact-words list
+
+One search call gives two lists. The first is the list above: passages closest **by meaning**. The second is short and separate: passages that hold the question's **exact words**. The reading model finds a passage that says the same thing in other words; it can miss a passage that holds the very word asked for (a name, a code, a rare term). The second list covers that, with no model involved.
+
+- **What is ranked.** Every passage in the tool's own passage store, scored with BM25 (`k1` 1.2, `b` 0.75, `idf = ln(1 + (N - df + 0.5) / (df + 0.5))`) on the question's distinctive words. A passage's words are its note title, its heading trail and its text.
+- **One set of token rules for question and passage** (`src/words/tokens.js`): lower-case; a token is a run of letters and digits; anything else ends it (`garden's` gives `garden` and `s`); no stemming, because these are exact words; runs longer than 64 characters are not words. **Distinctive** means not on the stop list (about 130 common English words) and not a single letter.
+- **A quoted phrase counts as a phrase.** Text between a pair of double quotes inside a wording (`search 'when is the "last frost" here'`) must appear in the passage as neighbouring words in that order, stop words included, within one part (a heading and the text under it are separate parts). A wording with phrases only lists passages that hold every one of its phrases. A phrase made only of stop words is ignored.
+- **Several wordings.** Each wording is ranked on its own and gives up to 3 passages, one per note. The lists are merged with every wording's best first, then every wording's second, and so on; a note found by two wordings is listed once. So each wording contributes to both lists.
+- **Never fused.** The two lists are never merged into one ranking and the exact-words score never changes the order of the list by meaning (one test showed that fusing lowers recall on reworded questions). `--no-exact-words` leaves the second list out; the first list is byte-for-byte the same either way, and the acceptance script checks that.
+- **Left out when it only repeats.** A passage already shown in the list by meaning is removed from the exact-words list, and at most 3 remain. When none remain the list is left out: no heading in human output, an empty array in JSON.
+- **Result shape.** The fields of a result by meaning, without `morePassages`, plus `words` (the question's distinctive words this passage really holds, read back from the passage itself). `rank` counts within this list. `score` is the BM25 score rounded to 2 places; it is on another scale than the score by meaning and the two are not comparable.
+- **Human output**, after the list by meaning and one empty line:
+
+```text
+Also contains these exact words:
+-  Hive records  ›  Where things are                        words: kestrel, ledger
+   /home/you/vault/Records/Hive records.md:5
+   obsidian://open?vault=vault&file=Records%2FHive%20records.md%23Where%20things%20are
+   The queen dates and the swarm notes for every hive are written in the kestrel ledger, …
+```
+
+- **It never fails a search.** If the table behind it (section 8) cannot be read or made, the list is left out, one line goes to the debug log, and the list by meaning stands.
+- **Wording.** Member-facing words are "by meaning" and "exact words". The tool, its help, its docs and its tests never use the name this project never uses for it (section 1, "Claims this project never makes").
+- `timings` gains `wordsMs`: loading the table, ranking, and reading the passages back.
+
+#### The search path is one function
+
+`searchReady(ready, opts)` in `src/search/search.js` takes a **ready embedder** and a **ready index** (`{ embedder, engine, manifest, dataDir, words }`) and returns `{ results, exactWords, timings }`. It loads nothing and writes nothing. `runSearch` does the loading around it (the quick sync, the engine probe, the model, the exact-words table, the retry when a tidy rewrite replaces the data folder) and calls it once. A process that keeps the model and the index in memory can call the same function again and again: that is the door warm mode will use.
 
 ### `status`
 
@@ -499,6 +529,14 @@ Each has an invented fixture note (never a real note name).
 
 **Bringing the engine in step (`src/engine/build.js`).** Any process that needs the engine takes `index.lock`, reads `engine/CURRENT`, and compares its `stamp` with the manifest's. Equal, file present, the probe below passes and `engine.count()` equal to `totals.passages`: use it. Anything else: build a new file `index-<n+1>.db` from the sidecar, run the flat self-test (section 9), check `count()` against `totals.passages` **before** switching, switch `engine/CURRENT` by atomic rename, and remove older engine files (a new file is needed because ruvector has no `close()` and an open file cannot be replaced on Windows). One notice line says the index was reloaded and how long it took. **A reader never builds from an older snapshot:** after taking `index.lock` the process re-reads the manifest from disk, and when a sync has moved on since the caller loaded its copy, the engine is brought in step with the saved one and the caller is handed that manifest. **A reader survives the tidy rewrite:** everything a search reads from the data folder (vectors, records) runs inside `withLiveData` (`src/store/manifest.js`); when the folder has vanished it re-reads `CURRENT` and runs once more.
 
+**The exact-words table (`words.bin`, `src/words/`).** A compact copy of what `passages.jsonl` already says, kept so a search does not read every passage again: for each passage, the 32-bit hash of each distinct distinctive word, how often it appears, and how many words the passage has. It holds numbers only: no text, no word, no note name. Layout: a small JSON head (table version, token-rules version, chunker version and settings hash, the manifest stamp it was made from, counts), then one 8-byte key and one passage count per note in manifest order, then the per-passage and per-word arrays. A note's key is the first 8 bytes of the SHA-256 of its vault path, its content hash and its passage count, so it changes whenever the note's path or content does.
+
+- **It is derived, like the engine file, and can always be made again from saved passages.** Whoever finds it behind brings it in step: the notes whose key it already holds are copied, the others are read from `passages.jsonl` and tokenised. Nothing is embedded.
+- **Who writes it.** `sync` at its end, after the tidy rewrite, so a removed note's words leave the file in the same sync that removes its text; and every 30 s during a long sync, so a search during a first sync has exact words too. `search` and `status` when they find it behind and no sync is running. `rebuild` makes it again from nothing. `rebuild --full`, and a sync after the chunker or model changed, delete it first.
+- **How it is written.** Whole, to a temp file, then one atomic rename, through the only writer. Two writers at once cannot damage it: each writes a complete table, and a table made from an older manifest is simply brought in step by the next reader.
+- **How it is trusted.** A reader uses the saved table as it is only when its stamp equals the manifest's and every note's passage count agrees. `status` does not trust the stamp: it compares the key of every note (section 11).
+- **Why a table and not a scan** (measured, `docs/BENCHMARKS.md`): scoring by reading and tokenising the whole passage store took about 0.21 s per question at 50,000 passages, which alone would use a third of the search budget; loading the table and ranking took about 0.004 s. The table for 50,000 passages was 5.7 MB.
+
 **A damaged file cannot crash the tool: the probe.** A truncated engine file aborts Node from inside the storage library, and no `try` can catch that. So this process never opens an **existing** engine file first. It starts a short child process (`src/engine/probe.js`, run with the same Node) that opens the file, checks the bytes for `"hnsw_config":null`, calls `count()`, prints the number and exits; the OS lock it held is freed by that exit. The child exiting 0 with a number: this process opens the file. The child killed by a signal, exiting non-zero, printing no number or taking longer than 20 s: the file counts as unreadable and the new-file path above runs, with the notice `The index file was damaged. It was rebuilt from saved passages (2.1 s). Your notes were not touched.` A file this process has just built is opened directly; it cannot be truncated by a copy that never happened. The probe's cost (one Node start and one open) is measured and listed in `docs/BENCHMARKS.md`. There is no per-note engine state and no incremental repair in `[M]`: a full build is seconds and has one code path. `[S]` When the engine sits at exactly the previous stamp and a sync changed few notes, apply just those notes; only if the measured full build on the reference vault is over 3 s.
 
 ---
@@ -642,8 +680,9 @@ The embedding model and the storage engine are the two choices still under study
 6. `engine-current`: the engine's stamp equals the manifest's (after `status` has brought it in step, which it does and reports).
 7. `no-old-text`: `sidecar.deadRecords` is 0.
 8. `versions-match`: chunker, model identity and engine settings in the manifest equal the running tool's.
+9. `exact-words-match`: the exact-words table lists exactly the notes of the manifest, in order, each with the same passage count and the same key (so the same path and content), and its passage total equals `totals.passages`. Checked from the table's own note list, never from its stamp alone, after `status` has brought a table that was behind in step (as it does for the engine). JSON `counts` carries `passagesInExactWords` beside `passagesRecorded` and `passagesInEngine`. The human view is unchanged: the table is a helper of search, and the rows a person reads stay the same.
 
-With `--verify`, three more: every id from `path#0` to `path#(passages-1)` exists in the engine and `path#passages` does not; for 50 stored vectors the engine's top 10 equals the exact scan's top 10 (a spot-check, named as one; the engine is a deterministic copy of the sidecar and `rebuild` re-derives it in seconds); every sidecar record parses and points at vectors that exist.
+With `--verify`, one more for the table (`verify-exact-words`: the saved table equals, array for array, one made again from the saved passages) and three more for the rest: every id from `path#0` to `path#(passages-1)` exists in the engine and `path#passages` does not; for 50 stored vectors the engine's top 10 equals the exact scan's top 10 (a spot-check, named as one; the engine is a deterministic copy of the sidecar and `rebuild` re-derives it in seconds); every sidecar record parses and points at vectors that exist.
 
 ---
 
@@ -761,7 +800,8 @@ src/sync/                        plan.js run.js progress.js detach.js
 src/embed/                       embedder.js models.js wordpiece.js pool.js model.js quiet.js
 src/store/                       safe-write.js lock.js sidecar.js manifest.js recover.js rewrite.js
 src/engine/                      engine.js ruvector-loader.js ruvector-flat.js selftest.js probe.js exact.js build.js
-src/search/                      search.js link.js
+src/search/                      search.js exact-words.js link.js
+src/words/                       tokens.js table.js bm25.js store.js        (the exact-words table; tokens, table and bm25 touch no files)
 src/screen/                      screen.js                                  [S]
 src/status/                      checks.js
 src/errors.js  src/log.js  src/rule-text.js  src/version.js
@@ -770,7 +810,7 @@ docs/                            SPEC.md BENCHMARKS.md FAQ.md assets/
 examples/                        CLAUDE.md AGENTS.md (the rule, ready to copy)
 ```
 
-Dependency direction: `cli → sync, search, status → chunker, embed, store, engine, vault → config, errors, log`. `chunker` imports nothing outside its folder and is testable with strings alone. `vault` cannot import `store`. Each folder's public API is typed with JSDoc typedefs.
+Dependency direction: `cli → sync, search, status → chunker, embed, words, store, engine, vault → config, errors, log` (`words` uses `store` and nothing above it). `chunker` imports nothing outside its folder and is testable with strings alone. `vault` cannot import `store`. Each folder's public API is typed with JSDoc typedefs.
 
 ---
 
@@ -805,6 +845,7 @@ The sync path first, because the first large sync is the long pole and can run w
 | `guards`, `safe-write` | Index in vault and vault in index refused, also through a symlink and for a home that does not exist yet; segment-boundary compare; home, root and folder-of-vaults refused; a write or delete outside the two roots throws; rename retry |
 | `link` | The strict encoder round-trips every character in edge case 9; `.md` kept; repeated headings use the parent chain; `null` cases |
 | `search` | Snippet limit at a word boundary; one result per note; refetch when one long note crowds the hits; score clamp |
+| `exact-words` | Token rules (lower-case, splits, Unicode, the 64-character limit) and the same rules for question and passage; stop words and single letters; quoted phrases, straight and curly, as neighbours in order; the BM25 formula and a small store ranked as worked out by hand, ties to the earlier passage; the table round-trips, holds no text, and refuses damaged bytes; unchanged notes are copied and changed ones read again, equal to a table made from nothing; one passage per note; each wording contributes; a reported word is really in the passage; repeats of the list by meaning are left out; the saved file is made, used, brought in step and checked note by note; `searchReady` with a stand-in embedder and the exact engine returns both lists and finds a phrase the list by meaning misses |
 | `output`, `errors` | `--json` prints one object and nothing else; code, exit and wording table |
 | Packaging | Shrinkwrap lists all five platform packages; the only runtime dependency is `ruvector` at its pin; `overrides` pins `@ruvector/core`; rule text equals `examples/CLAUDE.md` and contains "read the passages it returns" and not "open only"; no source file mentions a `compare` command |
 | Read-only, static | The scan in section 5 |
@@ -835,10 +876,11 @@ The sync path first, because the first large sync is the long pole and can run w
 | 18 | Delete the engine folder; `search` | Reload notice; correct results; nothing re-embedded |
 | 19 | Run with `fetch` disabled and the model cached | Sync and search succeed with zero network calls |
 | 20 | Fresh home, `rebuild --full` versus the incremental history above | Identical set of ids and identical passage texts |
-| 21 | Search quality on ten questions | Records, for each, the rank of the expected note (or a listed alternate) and whether two runs agree. Target: top 3 for at least 8 of 10 |
+| 21 | Search quality on ten questions | Records, for each, the rank of the expected note (or a listed alternate) and whether two runs agree. Target: top 3 for at least 8 of 10. Then the recall check: the ten reworded questions and ten questions in the notes' own words (`exact` in the questions file), each with one wording and with three, counted by meaning alone (top 3, top 6, top 8) and with the exact-words list (top 3 plus the list; top 8 plus the list). Recorded, not gated; the one thing it asserts is that turning the exact-words list off never changes the list by meaning |
 | 22 | Window test (slow group) | For 200 sampled passages, the densest first: the real token count of prefix plus body is 126 or fewer for **every one**, and changing the last word of each changes its vector for **every one**. One failure fails the step; there is no pass mark below 200 of 200 |
 | 23 | Cut the live engine file to half its length; `search` | Exit 0; the "index file was damaged" notice; correct results; nothing re-embedded; the tool's own process never died on a signal |
 | 24 | After a full `sync` with the pool, and again after a `sync` stopped by SIGINT | The command returns within 5 s of its last line; no process started by it is still alive; neither lock is held by a live process, so the next `sync` starts at once |
+| X1 | Add a note that holds an invented two-word phrase and another that holds the two words apart; `search` a question about something else that quotes the phrase, with `-k 2` | The list by meaning does not hold the note; `exactWords[0]` is that note, with the passage text and the words; the note with the words apart is not listed; `--no-exact-words` gives the same list by meaning and an empty array; several wordings each contribute; human output has the heading `Also contains these exact words:`; a passage already shown is not listed twice; `status` passes `exact-words-match`; `words.bin` does not hold the word; after the notes are deleted neither list returns them and `status --verify` passes `verify-exact-words` |
 | 25 | After the whole run | No file named `ruvector.db` exists in the folder the commands ran from, in the vault copy or in the repo; nothing was written outside `VAULT_MIRROR_HOME` and the two rule files |
 
 If step 21 comes in under its target: the one measured rate for questions asked in other words was about two in three, so a lower score is a finding, not a broken build. It is recorded, the agent rule's fallback to file search is the design's answer to it, and no README, guide or slide may print a recall figure.
@@ -950,7 +992,29 @@ A search has to be answered in one tool call, fast. Every extra round trip by th
 | A8 | **Timing breakdown in `search --json`** | `timings: { syncMs, modelAndEmbedMs, engineMs, probeMs, searchMs, readMs }` and `engine` (which engine answered) |
 | A9 | **Alias prefix** (was `[S]`) | Built before the chunker freeze: the first passage of a note carries `Title (also: alias one, alias two)`, capped at 12 tokens. An alias equal to the title is dropped |
 
-Not built in 0.1.0, and why: **an exact-words list** (passages that contain the question's distinctive words, shown as a separate short list, never fused with the meaning ranking). It is `[v0.1.1]`: it needs its own measurement on reworded and exact questions, and a proven build was not put at risk for it.
+The exact-words list was first held back as `[v0.1.1]`. It was built after the three proof rounds, on its own branch, once the model study showed it was the larger gain: see the next table.
+
+### Added after the proof rounds: the exact-words list
+
+Built on branch `feat/exact-words`, on top of the build that passed three rounds of independent proof. Every earlier test stayed green; the design is in section 6 ("The exact-words list", "The search path is one function"), section 8 ("The exact-words table") and section 11 (check 9).
+
+| # | Addition | Detail |
+| --- | --- | --- |
+| E1 | **A second, separate list in every search: passages with the question's exact words** | Up to 3, ranked with BM25 over the tool's own passage store, no model. Shown under the list by meaning as `Also contains these exact words:`; its own array `exactWords` in JSON. Never fused with the ranking by meaning. Left out when it would only repeat passages already shown. `--no-exact-words` turns it off |
+| E2 | **A table written at sync time, not a scan per question** | Decided from a measurement at 50,000 passages on the build machine (load average about 10, so rough): scanning the store took about 0.21 s per question; the table took about 0.004 s to load and rank, 5.7 MB on disk, about 0.3 s to make from nothing and about 0.01 s to bring in step when nothing changed. `words.bin` lives in the index folder, holds hashes and counts only, is rebuilt by `rebuild`, and `status` proves it note by note (`exact-words-match`) |
+| E3 | **Quoted phrases** | Double quotes inside a wording make a phrase: neighbours, in order, stop words included |
+| E4 | **Several wordings** | Each wording is ranked on its own; the merged list takes each wording's best first |
+| E5 | **The search path is one function, `searchReady`** | It takes a ready embedder and a ready index. `runSearch` loads and calls it. A question is now embedded after the engine is open rather than before; the model still loads while the probe child runs, so the total is unchanged |
+| E6 | **`status` gained one check and one count; `status --verify` one more check** | `exact-words-match`, `counts.passagesInExactWords`, `verify-exact-words`. The human view of `status` is unchanged |
+| E7 | **Tests** | 17 unit tests (`tests/unit/exact-words.test.js`), acceptance step X1, and the recall check inside step 21 with ten more questions in the notes' own words. Results in `docs/BENCHMARKS.md` |
+
+Choices made while building, each the simplest that kept a promise:
+
+- **One passage per note** in the exact-words list, as in the list by meaning. Another passage of a note already shown by meaning is still listed: it is a different passage, and it holds the words.
+- **The words reported are read back from the passage.** The table holds 32-bit hashes; two different words can share one (about one chance in twenty thousand for a given word in a large vault). Before a passage is listed its text is tokenised again, only words that are really there are reported, and a passage that holds none is dropped.
+- **A phrase is a filter, then BM25 ranks.** A passage that lacks a quoted phrase is not listed for that wording; among those that hold it, the order is the BM25 order of the wording's words. At most 300 passages are read back per wording to check a phrase.
+- **No stemming and no accent folding.** `tomato` does not match `tomatoes`. The list says "exact words" and means it; the list by meaning is what covers other forms.
+- **No table entry in the manifest.** The table is checked against the manifest, not recorded in it, so the manifest schema did not change and an index made before this feature gains its table at the first search, status or sync (a fraction of a second, once).
 
 ### Changed, with the reason
 

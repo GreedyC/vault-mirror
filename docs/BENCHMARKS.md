@@ -54,6 +54,78 @@ The probe (a child process that opens the existing engine file first, so a damag
 
 A question is embedded at the smallest padding that gives the same vector. Padding 16, 32, 64 and 128 gave bit-identical vectors for three questions; the embed itself took about 0.02 s at padding 16 against about 0.11 s at 128.
 
+## The exact-words list
+
+Added after the numbers above were taken, on branch `feat/exact-words`. Same machine, same versions, Oct 6, 2026. The load average is written beside each number; none of these was taken on a quiet machine, so each is **busy** and a rough lower bound like the rest of this file.
+
+### Scan the passage store for every question, or keep a table?
+
+Measured before choosing, on 50,000 real passages (the practice vault's 2,199 passages repeated under other paths; 19 MB of `passages.jsonl`), one question with five distinctive words, single thread, load average about 10:
+
+| Way | Time for one question | Notes |
+| --- | --- | --- |
+| Read the passage store, parse and tokenise every passage, score | 0.21 s (median of 3) | Reading the file is 0.002 s of that; the rest is parsing and tokenising. Alone it would use a third of the search budget |
+| Load a table written at sync time, find the words, rank | 0.004 s (load 0.0005 s, find 0.002 s, rank 0.001 s) | The same best score to 12 digits |
+
+So the tool keeps a table (`words.bin`). Its costs on the same 50,000 passages: 5.7 MB on disk; 0.29 s to make from nothing once the records are parsed; 0.008 s to bring in step when every note is unchanged.
+
+### Search speed with the list (scale check, 2,000 notes, 50,000 passages)
+
+`tests/bench/scale.mjs --notes 2000 --passages 50000 --runs 7`, cold process each time, median of 7. The scale check's invented text is a hard case for exact words: every word sits in about a tenth of all passages, so every question has thousands of candidates. Two runs are listed; the first was taken at load average 7.8 to 9.3, the second (after the last code change, which only touched `sync`) at 7.9 to 11.5.
+
+| Search | Budget | Run 1 | Run 2 |
+| --- | --- | --- | --- |
+| One wording, with the exact-words list | under 0.7 s | 0.50 s | 0.54 s |
+| One wording, `--no-exact-words` | | 0.50 s | 0.53 s |
+| One wording with a quoted phrase | | 0.49 s | 0.54 s |
+| One wording, with the quick sync look at 2,000 notes | | 0.52 s | 0.55 s |
+| Three wordings in one call | | 0.55 s | 0.60 s |
+
+Where the 0.50 s of run 1 goes (one wording, `--no-sync`; the tool's own `timings`, then what is left over):
+
+| Part | Time |
+| --- | --- |
+| Look at the vault for changes | 0.001 s (0.018 s without `--no-sync`) |
+| Load the reading model and embed the question | 0.260 s |
+| Open the engine file, after the probe child has checked it | 0.146 s (the probe itself took 0.218 s, alongside the model load) |
+| Search 50,000 rows by meaning | 0.016 s |
+| The exact-words list: load the table, rank, read the passages back | 0.018 s |
+| Read the passages for the results | 0.001 s |
+| Start Node, load the tool, print, exit (what is left of the wall time) | about 0.06 s |
+
+With three wordings the exact-words part was 0.023 s. On the practice vault (2,199 passages) and on the fixture it was 0.001 to 0.002 s.
+
+Other commands at 50,000 passages, with the table in place (run 2 in brackets):
+
+| Operation | Measured | Before the table, at 40,000 passages |
+| --- | --- | --- |
+| `status` | 0.27 s (0.27 s). It now also checks the table's note list against the manifest, one key per note | 0.23 s |
+| Sync with nothing changed | 0.066 s (0.067 s). It reads the table's head only | 0.06 s |
+| Sync after one edited note | 1.10 s (1.09 s), including the tidy rewrite of the whole sidecar and the table brought in step | 0.93 s |
+| `rebuild` | 1.17 s (1.16 s): the engine file and the table, both made again from saved passages | 0.6 s |
+| `status --verify` | 3.9 s (4.1 s), including a table made again from nothing and compared | 2.8 s |
+| Table size | 12.1 MB for the scale check's invented text; 5.7 MB for 50,000 real passages; 0.26 MB for the practice vault | |
+| Peak memory, search | 0.84 GB. **Over the 0.7 GB budget**, as it was before the table (0.79 GB at 40,000) | 0.79 GB |
+| Peak memory, `status`; sync with nothing changed | 0.28 GB; 0.08 GB | 0.25 GB; 0.07 GB |
+
+### The recall check
+
+Acceptance step 21 on the practice vault (176 notes, 2,199 passages), load average 6.2 at the start and 12.1 at the end (speed does not enter these counts). Twenty questions about ten notes: ten **reworded** (asked in words the note does not use) and ten **exact** (asked with the note's own words). Each was asked with one wording and with three wordings in one call. A question counts as found when the expected note (or a listed alternate) is among what was printed.
+
+| Questions | Wordings | By meaning, top 3 | By meaning, top 6 | Top 3 by meaning + exact-words list | By meaning, top 8 (the default list) | Default list + exact-words list |
+| --- | --- | --- | --- | --- | --- | --- |
+| Reworded | one | 9 of 10 | 9 of 10 | 9 of 10 | 9 of 10 | 9 of 10 |
+| Reworded | three | 10 of 10 | 10 of 10 | 10 of 10 | 10 of 10 | 10 of 10 |
+| Exact | one | 9 of 10 | 9 of 10 | 10 of 10 | 10 of 10 | 10 of 10 |
+| Exact | three | 10 of 10 | 10 of 10 | 10 of 10 | 10 of 10 | 10 of 10 |
+
+How to read it, and how not to:
+
+- The exact-words list never took a found note away: in all 40 searches the list by meaning was the same with the list turned off (the step asserts this).
+- With one wording, the list found the one exact question that the top 3 by meaning missed. With one wording it did not find the one reworded question the list by meaning missed (rank 10 by meaning); three wordings in one call did, at rank 1.
+- This vault is small and these twenty questions come from one author, so nearly every cell is at its ceiling and the table cannot show how much the list helps on a large vault. The larger study that led to this feature (60 questions, outside this repo) found the index's top 3 plus a keyword top 3 at 27 of 30 reworded and 30 of 30 exact, against 25 and 24 for the top 6 by meaning. **Not a number to print**, as with every recall figure here.
+- One more thing was tried and left out: listing a passage only when it scores at least 30%, 50% or 70% of the best passage for its wording. On these twenty questions it changed no count in the table, and across the forty searches it shortened the lists from 105 passages in all to 105, 101 and 85, so there was no evidence for the rule and it was not added.
+
 ## Items the spec listed as "not measured by anything yet"
 
 | Item | State after this build |
@@ -71,7 +143,7 @@ A question is embedded at the smallest padding that gives the same vector. Paddi
 | Any machine other than the build machine | **Still owed.** Verified on Apple Silicon Macs. Windows, Intel Macs and Linux are not yet verified |
 | Whether an `obsidian://` link opens when clicked | **Still owed.** It needs a person. The format is unit-tested and round-trips |
 | The token counter against the real model | Agreed at the exact edge of the window for 22 kinds of text (prose, prices, hex, web addresses, accents, emoji, Greek, Cyrillic, Japanese, CJK, symbols, zero-width and no-break spaces, a 120-character word). The window test passed 200 of 200 on the practice vault (densest passage 110 tokens) and 200 of 200 on the fixture |
-| How often the index finds the right note for a question asked in other words | Ten reworded questions on the practice vault: the expected note was in the top 3 for 9 of 10 with one wording, and for 10 of 10 (rank 1 or 2) when three wordings were passed in one call. Two runs agreed on all ten. A small sample from one author: recorded, **not a number to print** |
+| How often the index finds the right note for a question asked in other words | Ten reworded questions on the practice vault: the expected note was in the top 3 for 9 of 10 with one wording, and for 10 of 10 (rank 1 or 2) when three wordings were passed in one call. Two runs agreed on all ten. A small sample from one author: recorded, **not a number to print**. Run again with the exact-words list: the same counts, see "The recall check" above |
 
 ## How to measure again
 
@@ -80,6 +152,7 @@ npm test
 node tests/acceptance/run.mjs --vault tests/fixtures/vault
 node tests/acceptance/run.mjs --vault <a vault> --read-only-vault --questions tests/acceptance/questions.obsidian-help.json
 node tests/bench/scale.mjs --dir <an empty scratch folder>
+node tests/bench/scale.mjs --dir <an empty scratch folder> --notes 2000 --passages 50000 --runs 7
 ```
 
 Run them with nothing else heavy on the machine, and write the load average beside each number.

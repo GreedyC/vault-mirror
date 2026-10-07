@@ -13,6 +13,8 @@ import { passageId } from '../engine/engine.js';
 import { createEmbedder } from '../embed/embedder.js';
 import { sameIdentity } from '../embed/model.js';
 import { readVectors } from '../store/sidecar.js';
+import { checkWords, wordsFor, readWords } from '../words/store.js';
+import { sameWords } from '../words/table.js';
 import { debug } from '../log.js';
 import { TOOL_VERSION, CHUNKER_VERSION } from '../version.js';
 
@@ -69,6 +71,16 @@ export async function computeStatus(ctx, opts, ui) {
     }
   }
 
+  // The exact-words table: checked note by note from its own list; brought in step when it is behind.
+  let words = { ok: false, passages: 0, notes: 0 };
+  if (loaded && manifest && passagesRecorded > 0) {
+    words = checkWords(ctx.indexDir, manifest);
+    if (!words.ok && !running) {
+      try { wordsFor(ctx.indexDir, loaded, { save: true }); words = checkWords(ctx.indexDir, manifest); }
+      catch (e) { debug(`status could not bring the exact-words table in step: ${String(/** @type {any} */ (e)?.message).slice(0, 160)}`); }
+    }
+  }
+
   const pendingTotal = plan.pending.new + plan.pending.changed + plan.pending.removed;
   const sumPassages = manifest ? Object.values(manifest.notes).reduce((n, e) => n + e.passages, 0) : 0;
   let versionsOk = false;
@@ -88,6 +100,7 @@ export async function computeStatus(ctx, opts, ui) {
     { name: 'counts-add-up', ok: plan.seen === notesIndexed + leftOutTotal, detail: `${plan.seen} on disk, ${notesIndexed} in the index, ${leftOutTotal} left out` },
     { name: 'passages-match', ok: Boolean(manifest) && sumPassages === passagesRecorded && passagesRecorded === passagesInEngine, detail: `${sumPassages} summed, ${passagesRecorded} recorded, ${passagesInEngine} in the engine` },
     { name: 'engine-current', ok: engineCurrent || passagesRecorded === 0, detail: engineCurrent ? 'the engine was built from this manifest' : 'the engine is behind the manifest' },
+    { name: 'exact-words-match', ok: passagesRecorded === 0 || words.ok, detail: words.ok || passagesRecorded === 0 ? `the exact-words table lists the same ${passagesRecorded} passages, note for note` : `the exact-words table lists ${words.passages} passages in ${words.notes} notes; the index has ${passagesRecorded} in ${notesIndexed}` },
     { name: 'no-old-text', ok: Boolean(manifest) && manifest?.sidecar.deadRecords === 0, detail: `${manifest ? manifest.sidecar.deadRecords : 0} old records waiting for the next sync` },
     { name: 'versions-match', ok: versionsOk, detail: versionsOk ? 'chunker, model and engine are the ones the index was made with' : 'the tool, model or engine changed since the index was made' },
   ];
@@ -114,15 +127,19 @@ export async function computeStatus(ctx, opts, ui) {
     checks.push({ name: 'verify-spot-check', ok: agree === tried, detail: `${agree} of ${tried} sampled searches agree with an exact scan (a spot-check)` });
     const scan = scanLog(loaded.dataDir, 0, manifest.sidecar.logBytes);
     const recordsOk = scan.goodBytes === manifest.sidecar.logBytes && scan.records.every((r) => r.rec.op !== 'put' || r.rec.passages.every((/** @type {any} */ p) => p.vec < manifest.sidecar.vectors));
+    const savedWords = readWords(ctx.indexDir);
+    let wordsOk = false;
+    try { wordsOk = Boolean(savedWords) && sameWords(/** @type {import('../words/table.js').WordsTable} */ (savedWords), wordsFor(ctx.indexDir, loaded, { fresh: true }).table); } catch { wordsOk = false; }
+    checks.push({ name: 'verify-exact-words', ok: wordsOk, detail: wordsOk ? 'the exact-words table equals one made again from the saved passages' : 'the exact-words table differs from the saved passages' });
     checks.push({ name: 'verify-sidecar', ok: recordsOk, detail: recordsOk ? 'every saved record parses and points at vectors that exist' : 'a saved record is damaged' });
   }
 
   const inStep = checks.every((c) => c.ok) && !running;
-  const indexLooksWrong = checks.some((c) => !c.ok && ['passages-match', 'engine-current', 'no-old-text'].includes(c.name) || (!c.ok && c.name.startsWith('verify-')));
+  const indexLooksWrong = checks.some((c) => !c.ok && ['passages-match', 'engine-current', 'exact-words-match', 'no-old-text'].includes(c.name) || (!c.ok && c.name.startsWith('verify-')));
   const versions = { tool: TOOL_VERSION, ...(() => { const e = engineBlock(); return { ruvector: e.version, core: e.core, native: e.native }; })(), model: manifest ? manifest.embedding.model : ctx.cfg.embedding.model, chunker: CHUNKER_VERSION };
   return {
     inStep,
-    counts: { notesOnDisk: plan.seen, leftOut, otherFiles: plan.otherFiles, eligible: plan.eligible, notesIndexed, passagesRecorded, passagesInEngine, pending: plan.pending, unreadable: plan.skipped.length },
+    counts: { notesOnDisk: plan.seen, leftOut, otherFiles: plan.otherFiles, eligible: plan.eligible, notesIndexed, passagesRecorded, passagesInEngine, passagesInExactWords: words.passages, pending: plan.pending, unreadable: plan.skipped.length },
     checks, running, lastSync: manifest ? manifest.lastRun : null, versions,
     // Not part of the JSON contract: used for the human view.
     _plan: plan, _stop: syncWouldStop(plan, manifest, { vaultPath: ctx.vault.real }), _leftOutTotal: leftOutTotal, _indexLooksWrong: indexLooksWrong && pendingTotal === 0, _verify: Boolean(opts.verify), _manifest: manifest, _dataDir: loaded ? loaded.dataDir : null,

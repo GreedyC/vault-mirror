@@ -568,6 +568,39 @@ await step(21, 'search quality on the question list', () => {
   }
   timings.searchQuality = { top3, of: questions.length, agree, lines };
   notes.push(`step 21 (recorded, not gated): expected note in the top 3 for ${top3} of ${questions.length} questions; two runs agreed on ${agree} of ${questions.length}\n${lines.join('\n')}`);
+
+  // The recall check: reworded questions and questions in the note's own words, with one wording and with
+  // three, by meaning alone and with the exact-words list. "Found" = the expected note is in what was printed.
+  const found = (/** @type {any[]} */ list, /** @type {string[]} */ wanted) => list.some((x) => wanted.includes(x.vaultPath));
+  /** @type {Record<string, any>} */
+  const recall = {};
+  let fused = 0;
+  for (const [kind, pick] of /** @type {[string, (q: any) => string][]} */ ([['reworded', (q) => q.question], ['exact', (q) => q.exact]])) {
+    const set = questions.filter((/** @type {any} */ q) => pick(q));
+    if (!set.length) continue;
+    for (const wordings of [1, 3]) {
+      const row = { of: set.length, top3: 0, top6: 0, top3PlusExact: 0, top8: 0, top8PlusExact: 0 };
+      for (const q of set) {
+        if (wordings === 3 && !q.phrasings) { row.of--; continue; }
+        const wanted = [q.expected, ...(q.alternates || [])];
+        const words = wordings === 1 ? [pick(q)] : [pick(q), ...q.phrasings];
+        const wide = vm(['search', ...words, '--no-sync', '--json', '-k', '8']).json;           // what a person's AI gets by default
+        const narrow = vm(['search', ...words, '--no-sync', '--json', '-k', '3']).json;         // three by meaning plus the exact-words list
+        const alone = vm(['search', ...words, '--no-sync', '--json', '-k', '8', '--no-exact-words']).json;
+        if (JSON.stringify(alone.results) !== JSON.stringify(wide.results) || alone.exactWords.length) fused++;
+        if (found(wide.results.slice(0, 3), wanted)) row.top3++;
+        if (found(wide.results.slice(0, 6), wanted)) row.top6++;
+        if (found(narrow.results, wanted) || found(narrow.exactWords, wanted)) row.top3PlusExact++;
+        if (found(wide.results, wanted)) row.top8++;
+        if (found(wide.results, wanted) || found(wide.exactWords, wanted)) row.top8PlusExact++;
+      }
+      recall[`${kind}, ${wordings === 1 ? 'one wording' : 'three wordings'}`] = row;
+    }
+  }
+  eq(fused, 0, 'searches whose list by meaning changed when the exact-words list was turned off');
+  timings.recall = recall;
+  const table = Object.entries(recall).map(([k, r]) => `    ${k.padEnd(26)} of ${r.of}: by meaning top 3 = ${r.top3}, top 6 = ${r.top6}, top 3 + exact words = ${r.top3PlusExact}; top 8 = ${r.top8}, top 8 + exact words = ${r.top8PlusExact}`);
+  notes.push(`step 21 recall check (recorded, not gated; load ${os.loadavg().map((x) => x.toFixed(1)).join(' ')}):\n${table.join('\n')}`);
   return `top 3 for ${top3} of ${questions.length} (target 8); two runs agree ${agree} of ${questions.length}`;
 });
 
@@ -687,6 +720,66 @@ await step('S2', 'odd file names: ids, paths and links round-trip', () => {
   const spaced = keys.find((k) => k.includes('Trailing space / Leading space.md'));
   assert(spaced, 'path segments are never trimmed');
   return `${keys.length} odd-named notes round-trip`;
+});
+
+await step('X1', 'an exact phrase the list by meaning misses is found by the exact-words list', () => {
+  // Two invented notes. One is about beehives and says "kestrel ledger" in passing; the other holds the same
+  // two words apart. The question is mostly about soup, so the two places of the list by meaning go elsewhere.
+  const HIVE_SENTENCE = 'Each hive has a number painted on its lid. The queen dates, the swarm notes and the honey weights for every hive are written in the kestrel ledger, which lives in the tin box under the bench with the smoker fuel and the spare frames.';
+  fs.mkdirSync(path.join(VAULT, 'Records'), { recursive: true });
+  fs.writeFileSync(path.join(VAULT, 'Records', 'Hive records.md'), `# Hive records\n\n## Where things are\n\n${HIVE_SENTENCE}\n`);
+  fs.writeFileSync(path.join(VAULT, 'Records', 'Bird log.md'), '# Bird log\n\n## March\n\nA kestrel hovered over the lane all morning. The feed ledger for the hens was brought up to date in the afternoon.\n');
+  accept();
+  const QUESTION = 'how long should the soup stock simmer, and what does the "kestrel ledger" say';
+  const s = vm(['search', QUESTION, '--json', '-k', '2']);
+  eq(s.status, 0, 'exit'); eq(s.json.inStep, true, 'the quick sync indexed the new notes');
+  assert(!s.json.results.some((/** @type {any} */ x) => x.vaultPath === 'Records/Hive records.md'), `the list by meaning misses the note that says the phrase: ${s.json.results.map((/** @type {any} */ x) => x.vaultPath).join(', ')}`);
+  assert(Array.isArray(s.json.exactWords), 'the exact-words list is its own array');
+  const hit = s.json.exactWords[0] || {};
+  eq(hit.vaultPath, 'Records/Hive records.md', 'the exact-words list finds the note that says the phrase');
+  eq(hit.rank, 1, 'its own rank'); eq(hit.section, 'Where things are', 'section');
+  assert(hit.text.includes('kestrel ledger'), 'with the full passage text');
+  assert(hit.words.includes('kestrel') && hit.words.includes('ledger'), `with the words it holds: ${hit.words}`);
+  assert(fs.existsSync(hit.path) && hit.line > 0 && hit.passage.startsWith('Records/Hive records.md#'), 'and a way back to the note');
+  assert(!s.json.exactWords.some((/** @type {any} */ x) => x.vaultPath === 'Records/Bird log.md'), 'a note that holds the two words apart is not a match for the phrase');
+  assert(s.json.exactWords.length <= 3, 'a short list');
+  const shown = new Set(s.json.results.map((/** @type {any} */ x) => x.passage));
+  assert(!s.json.exactWords.some((/** @type {any} */ x) => shown.has(x.passage)), 'it never repeats a passage already shown');
+  assert(typeof s.json.timings.wordsMs === 'number', 'its time is in the breakdown');
+
+  const plain = vm(['search', 'kestrel ledger', '--json', '--no-sync', '-k', '2']);
+  const both = [...plain.json.results, ...plain.json.exactWords].map((/** @type {any} */ x) => x.vaultPath);
+  assert(both.includes('Records/Hive records.md') && both.includes('Records/Bird log.md'), 'without the quotes, both notes are found by one list or the other');
+  const off = vm(['search', QUESTION, '--json', '--no-sync', '-k', '2', '--no-exact-words']);
+  eq(JSON.stringify(off.json.results), JSON.stringify(s.json.results), 'the list by meaning is the same with the exact-words list turned off: the two are never mixed');
+  eq(off.json.exactWords.length, 0, 'and the list is empty');
+  const wordings = vm(['search', 'how long should the soup stock simmer', 'what is in the "kestrel ledger"', 'where is the tin box', '--json', '--no-sync', '-k', '2']);
+  assert(wordings.json.exactWords.some((/** @type {any} */ x) => x.vaultPath === 'Records/Hive records.md'), 'with several wordings, each one contributes to the exact-words list');
+
+  const human = vm(['search', QUESTION, '--no-sync', '-k', '2']);
+  assert(/\nAlso contains these exact words:\n- {2}Hive records {2}› {2}Where things are\s+words: .*kestrel, ledger/.test(human.stdout), `human output: ${human.stdout.slice(-400)}`);
+  assert(!/hybrid/i.test(human.stdout + human.stderr), 'never that word');
+  const repeat = vm(['search', HIVE_SENTENCE, '--no-sync', '-k', '20']);
+  eq(top(vm(['search', HIVE_SENTENCE, '--no-sync', '--json', '-k', '20']).json).vaultPath, 'Records/Hive records.md', 'rank 1 by meaning for its own sentence');
+  assert(!/- {2}Hive records/.test(repeat.stdout), 'a passage already shown by meaning is not listed twice');
+
+  const st = vm(['status', '--json']);
+  eq(st.json.inStep, true, 'in step');
+  eq(st.json.checks.find((/** @type {any} */ c) => c.name === 'exact-words-match').ok, true, 'the exact-words table matches the index, note for note');
+  eq(st.json.counts.passagesInExactWords, st.json.counts.passagesRecorded, 'passages in the exact-words table = passages recorded');
+  const idx = readIndex(MAIN);
+  assert(fs.existsSync(path.join(idx.dir, 'words.bin')), 'the table is one file in the index folder');
+  eq(grep(MAIN, 'kestrel ledger').filter((f) => !/passages\.jsonl$/.test(f)).join(','), '', 'the phrase is stored in the passage store only');
+  eq(fs.readFileSync(path.join(idx.dir, 'words.bin')).includes('kestrel'), false, 'the table holds numbers, not words');
+
+  fs.rmSync(path.join(VAULT, 'Records'), { recursive: true }); accept();
+  const gone = vm(['search', QUESTION, '--json', '-k', '2']);
+  assert(![...gone.json.results, ...gone.json.exactWords].some((/** @type {any} */ x) => x.vaultPath.startsWith('Records/')), 'after the notes are deleted, neither list returns them');
+  const after = vm(['status', '--verify', '--json']);
+  eq(after.json.inStep, true, 'in step after the delete');
+  eq(after.json.checks.find((/** @type {any} */ c) => c.name === 'verify-exact-words').ok, true, 'the table equals one made again from the saved passages');
+  timings.exactWordsMs = s.json.timings.wordsMs;
+  return `found at rank 1 of the exact-words list (${hit.words.join(', ')}); ${s.json.timings.wordsMs} ms`;
 });
 
 await step(25, 'after the whole run', () => {

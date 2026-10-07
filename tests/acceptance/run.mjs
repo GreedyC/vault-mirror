@@ -748,7 +748,11 @@ await step('S2', 'odd file names: ids, paths and links round-trip', () => {
   const idx = readIndex(MAIN); const keys = Object.keys(idx.manifest.notes).filter((k) => k.startsWith('Odd/'));
   eq(keys.length, oddWritten.length, `odd-named notes indexed, of the ${oddWritten.length} this system could hold (indexed: ${keys.join(' | ')}; written: ${oddWritten.join(' | ')})`);
   assert(keys.length >= (WIN ? 2 : 4), `odd-named notes indexed: ${keys.length}`);
-  for (const key of keys) assert(fs.existsSync(path.join(VAULT, ...key.normalize('NFC').split('/'))) || fs.existsSync(path.join(VAULT, ...key.normalize('NFD').split('/'))), `the manifest key opens a real file`);
+  // The key is one spelling for every form of a name. The name as the disk spells it is kept beside it, and is what opens the file.
+  const listed = (/** @type {string} */ p) => fs.readdirSync(path.dirname(p)).includes(path.basename(p));
+  for (const key of keys) assert(listed(path.join(VAULT, ...(idx.manifest.notes[key].file ?? key).split('/'))), `the name kept for ${key} is one its folder lists`);
+  const accented = keys.find((k) => k.startsWith('Odd/Caf'));
+  assert(accented && idx.manifest.notes[accented].file === `Odd/${ODD_NAMES[2]}` && accented !== `Odd/${ODD_NAMES[2]}`, 'a name with a separate accent mark is kept as written, beside a key in the one spelling');
   // The first odd name this system could hold: the one full of punctuation on macOS and Linux, the one with an accent and an emoji on Windows.
   const which = ODD_NAMES.findIndex((name) => oddWritten.includes(path.join('Odd', name)));
   assert(which >= 0, 'no odd-named note could be written at all');
@@ -759,6 +763,20 @@ await step('S2', 'odd file names: ids, paths and links round-trip', () => {
   assert(fs.existsSync(hit.path), 'path opens the file');
   const file = new URL(hit.link).searchParams.get('file');
   eq(file, `${hit.vaultPath}#Odd name ${which}`, 'the link decodes back to the vault path and heading');
+  // The note whose name holds a separate accent mark, on every system: the path is the folder's own spelling of it.
+  const acc = vm(['search', ODD_BODIES[2], '--json', '-k', '5']).json.results.find((/** @type {any} */ x) => x.vaultPath === accented);
+  assert(acc, 'the note with a separate accent mark is found');
+  assert(fs.existsSync(acc.path) && listed(acc.path), `its path opens the file, by the name its folder lists: ${acc.path}`);
+  eq(fs.readFileSync(acc.path, 'utf8').includes(ODD_BODIES[2]), true, 'and that file is the note');
+  // An index made before the name was kept (0.1.0): the next search's own quick sync notes it, and no note is read again.
+  const old = JSON.parse(JSON.stringify(idx.manifest)); for (const key of keys) delete old.notes[key].file;
+  fs.writeFileSync(path.join(idx.dataDir, 'manifest.json'), JSON.stringify(old));
+  const up = vm(['search', ODD_BODIES[2], '--json', '-k', '5']);
+  const again = up.json.results.find((/** @type {any} */ x) => x.vaultPath === accented);
+  assert(again && listed(again.path), `after an upgrade the path is the name the folder lists: ${again?.path}`);
+  const now = readIndex(MAIN);
+  eq(now.manifest.notes[accented].file, `Odd/${ODD_NAMES[2]}`, 'the name is in the index again');
+  eq(now.manifest.stamp, idx.manifest.stamp, 'and no passage was made again');
   assert(!/[!'()*]/.test(hit.link.split('file=')[1]), 'strictly encoded');
   if (oddWritten.includes(path.join('Odd', 'Trailing space ', ' Leading space.md'))) {
     const spaced = keys.find((k) => k.includes('Trailing space / Leading space.md'));

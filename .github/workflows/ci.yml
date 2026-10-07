@@ -116,20 +116,55 @@ jobs:
         with:
           path: ~/.ruvector/models
           key: reading-model-${{ runner.os }}-${{ hashFiles('src/embed/models.js') }}
-      - name: Install with the README's line, pointed at this commit
+      # The README's install line as it is written there (no quotes), pointed at this commit. On Windows it is
+      # typed into PowerShell and then into the command prompt, the two places a person there would type it.
+      - name: Install with the README's line (bash)
+        if: runner.os != 'Windows'
         shell: bash
-        run: npm install -g "github:${{ github.event.pull_request.head.repo.full_name || github.repository }}#${{ github.event.pull_request.head.sha || github.sha }}"
-      - name: The command answers in PowerShell
+        run: npm install -g github:${{ github.event.pull_request.head.repo.full_name || github.repository }}#${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Install with the README's line (PowerShell)
         if: runner.os == 'Windows'
         shell: pwsh
-        run: vault-mirror --version
-      - name: The command answers in the Windows command prompt
+        run: |
+          npm install -g github:${{ github.event.pull_request.head.repo.full_name || github.repository }}#${{ github.event.pull_request.head.sha || github.sha }}
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+      # The command is found, answers, and hands back its exit codes: 0, and 2 when no vault is set up yet.
+      - name: The command answers in PowerShell, with the right exit codes
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          (Get-Command vault-mirror).Source
+          vault-mirror --version
+          if ($LASTEXITCODE -ne 0) { Write-Host "--version: wanted exit 0, got $LASTEXITCODE"; exit 1 }
+          vault-mirror status
+          if ($LASTEXITCODE -ne 2) { Write-Host "status with no vault set up: wanted exit 2, got $LASTEXITCODE"; exit 1 }
+          vault-mirror no-such-command
+          if ($LASTEXITCODE -ne 2) { Write-Host "an unknown command: wanted exit 2, got $LASTEXITCODE"; exit 1 }
+          exit 0
+      # A step is a batch file, and one batch file runs another with "call". A person at the prompt types the line without it.
+      - name: Install with the README's line (Windows command prompt)
         if: runner.os == 'Windows'
         shell: cmd
-        run: vault-mirror --version
-      - name: The command answers in bash
+        run: call npm install -g github:${{ github.event.pull_request.head.repo.full_name || github.repository }}#${{ github.event.pull_request.head.sha || github.sha }}
+      - name: The command answers in the Windows command prompt, with the right exit codes
+        if: runner.os == 'Windows'
+        shell: cmd
+        run: |
+          where vault-mirror
+          call vault-mirror --version
+          if not %ERRORLEVEL%==0 exit /b 1
+          call vault-mirror status
+          if not %ERRORLEVEL%==2 exit /b 1
+          call vault-mirror no-such-command
+          if not %ERRORLEVEL%==2 exit /b 1
+          exit /b 0
+      - name: The command answers in bash, with the right exit codes
         shell: bash
-        run: vault-mirror --version
+        run: |
+          command -v vault-mirror
+          vault-mirror --version
+          code=0; vault-mirror status || code=$?; [ "$code" = 2 ] || { echo "status with no vault set up: wanted exit 2, got $code"; exit 1; }
+          code=0; vault-mirror no-such-command || code=$?; [ "$code" = 2 ] || { echo "an unknown command: wanted exit 2, got $code"; exit 1; }
       # No shell is set: PowerShell on Windows, bash elsewhere, as a new user would have it.
       - name: The first ten minutes of a new user (real output and timings)
         run: node tests/acceptance/first-run.mjs --installed --default-home

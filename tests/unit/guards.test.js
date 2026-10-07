@@ -131,6 +131,26 @@ test('the rule is one block between two markers; a re-run replaces it and touche
   assert.equal(again.text.split('vault-mirror:start').length, 2, 'never a second copy');
 });
 
+test('the rule in a file with Windows line endings: the file keeps them, and a second run changes nothing', () => {
+  const before = '# My project\r\n\r\nKeep this line.\r\n';
+  const first = applyRule(before);
+  assert.equal(first.action, 'updated');
+  assert.ok(first.text.startsWith(before), 'what was there is untouched');
+  assert.ok(!/[^\r]\n/.test(first.text), `no line of the file ends without a carriage return: ${JSON.stringify(first.text)}`);
+  assert.equal(first.text.replace(/\r\n/g, '\n'), '# My project\n\nKeep this line.\n\n' + RULE_BLOCK + '\n', 'the same file as with plain line endings');
+  assert.equal(first.text.split('vault-mirror:start').length, 2);
+  assert.equal(applyRule(first.text).action, 'unchanged', 'a second run');
+  // A file checked out with Windows line endings already holds the rule in that form: it is the rule, not an older wording.
+  const checkedOut = ('Intro.\n\n' + RULE_BLOCK + '\nAfter.\n').replace(/\n/g, '\r\n');
+  assert.deepEqual(applyRule(checkedOut), { text: checkedOut, action: 'unchanged' });
+  // An older wording in such a file is replaced in the file's own line endings.
+  const older = applyRule(checkedOut.replace('Do not read the whole vault.', 'An older wording.'));
+  assert.deepEqual([older.action, older.text], ['updated', checkedOut]);
+  // Plain line endings, and a file that mixes the two, get plain ones as before.
+  assert.ok(!applyRule('a\nb\r\n').text.slice(6).includes('\r'));
+  assert.ok(!applyRule('').text.includes('\r'));
+});
+
 test('worker count is automatic and conservative', () => {
   assert.equal(chooseWorkers('auto', { cores: 16, totalGB: 64 }).workers, 4);
   assert.equal(chooseWorkers('auto', { cores: 8, totalGB: 8 }).workers, 2);

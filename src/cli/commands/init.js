@@ -43,16 +43,22 @@ export function projectCheck(project, vaultReal, obsidianVaults) {
   return { ok: true, reason: null, real };
 }
 
-/** Insert or replace the rule between its two markers. Nothing else in the file is touched. @param {string | null} existing */
+/**
+ * Insert or replace the rule between its two markers. Nothing else in the file is touched.
+ * A file whose every line ends the Windows way (CRLF) gets the rule in that form, so it never ends up with both.
+ * @param {string | null} existing
+ */
 export function applyRule(existing) {
   if (existing == null) return { text: RULE_BLOCK + '\n', action: 'created' };
+  const eol = existing.includes('\r\n') && !/(^|[^\r])\n/.test(existing) ? '\r\n' : '\n';
+  const block = RULE_BLOCK.split('\n').join(eol);
   const a = existing.indexOf(RULE_START); const b = existing.indexOf(RULE_END);
   if (a >= 0 && b > a) {
-    const next = existing.slice(0, a) + RULE_BLOCK + existing.slice(b + RULE_END.length);
+    const next = existing.slice(0, a) + block + existing.slice(b + RULE_END.length);
     return { text: next, action: next === existing ? 'unchanged' : 'updated' };
   }
-  const sep = existing.length === 0 || existing.endsWith('\n\n') ? '' : existing.endsWith('\n') ? '\n' : '\n\n';
-  return { text: existing + sep + RULE_BLOCK + '\n', action: 'updated' };
+  const sep = existing.length === 0 || existing.endsWith(eol + eol) ? '' : existing.endsWith('\n') ? eol : eol + eol;
+  return { text: existing + sep + block + eol, action: 'updated' };
 }
 
 /**

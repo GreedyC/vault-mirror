@@ -124,8 +124,52 @@ How to read it, and how not to:
 - The exact-words list never took a found note away: in all 40 searches the list by meaning was the same with the list turned off (the step asserts this).
 - With one wording, the list found the one exact question that the top 3 by meaning missed. With one wording it did not find the one reworded question the list by meaning missed (rank 10 by meaning); three wordings in one call did, at rank 1.
 - This vault is small and these twenty questions come from one author, so nearly every cell is at its ceiling and the table cannot show how much the list helps on a large vault. The larger study that led to this feature (60 questions, outside this repo) found the index's top 3 plus a keyword top 3 at 27 of 30 reworded and 30 of 30 exact, against 25 and 24 for the top 6 by meaning. **Not a number to print**, as with every recall figure here.
-- These counts did not hold at full size. On a private 2,082-note vault (51,572 passages), 45 questions by one author, outside this repo: a question sharing no words with the note had it in the top eight by meaning in 1 of 15 with one wording and 10 of 15 with three; a question sharing a few words, 9 of 15 (a right note in 14 of 15); an exact phrase, 10 of 10. A match number did not tell a hit from a miss. Small sample: read it as "most" and "few", not as rates.
+- These counts did not hold at full size. See "Recall on a large vault" below.
 - One more thing was tried and left out: listing a passage only when it scores at least 30%, 50% or 70% of the best passage for its wording. On these twenty questions it changed no count in the table, and across the forty searches it shortened the lists from 105 passages in all to 105, 101 and 85, so there was no evidence for the rule and it was not added.
+
+### Recall on a large vault (one vault, 45 questions, one question writer)
+
+This is the detail behind the README's plain-words summary of search quality. Measured Oct 7, 2026 with vault-mirror 0.1.0 on a real personal vault of 2,082 notes and 51,572 passages. The vault is private, so the question bank and the raw results are not in this repo and a reader cannot repeat this run. Every search used `search --no-sync`, and the vault was only read. Speed does not enter these counts.
+
+The 45 questions were written by one person after reading a random sample of the notes. Four kinds:
+
+- **Close** (15): a natural question that shares a few meaningful words with the note.
+- **Far** (15): no content word of the question appears anywhere in the note (checked by script).
+- **Exact** (10): a phrase, name or term taken from the note.
+- **Topic** (5): answerable from several notes.
+
+Each question has three wordings: the asker's own words, then two rephrasings of the kind an AI writes before it searches. Each was run with one wording and with all three in one call. "Default output" is what a search prints by default: the top 8 by meaning plus the exact-words list. "A right note" also counts a runner-up note that was listed as equally good before the run.
+
+| Kind | Wordings | The one best note, top 8 by meaning | The one best note, default output | A right note, default output |
+| --- | --- | --- | --- | --- |
+| Close (15) | one | 9 | 11 | 15 |
+| Close (15) | three | 10 | 11 | 15 |
+| Far (15) | one | 1 | 1 | 2 |
+| Far (15) | three | 10 | 11 | 15 |
+| Exact (10) | one | 10 | 10 | 10 |
+| Exact (10) | three | 10 | 10 | 10 |
+| Topic (5) | one | 2 | 3 | 5 |
+| Topic (5) | three | 3 | 4 | 5 |
+| All (45) | one | 22 | 25 | 32 |
+| All (45) | three | 33 | 36 | 45 |
+
+What it says:
+
+- **A question that shares words with the note is found.** Exact questions were found every time. Close questions found a right note nearly every time, though not always the one best note, because this vault holds several notes on most ideas.
+- **One wording that shares no words with the note mostly misses.** The note was in the top 50 by meaning for 5 of the 15 far questions.
+- **Several wordings in one call are the largest gain measured**, because the rephrasings bring in ordinary words the note does use.
+- **The exact-words list helped only with three wordings.** With one far wording it found none of the 15.
+- **Three wordings sometimes push the one best note down** a few places. Each time a sibling note took the slot.
+- **A match number does not tell a hit from a miss.** A far miss still showed a score of about 0.45 to 0.55, against a median of 0.72 for exact questions.
+- **Plain file search is a real safety net.** Keyword search with the words an AI would try after rephrasing found the best note about as often as the index with three wordings, and for none of the 15 with the asker's own far wording. What the index adds on this vault is ranking and less reading, not coverage. That is why the rule `init` writes tells the AI to search the files when the passages do not answer.
+
+Limits:
+
+- One vault, 45 questions, and one person who wrote the questions, the wordings and the answer keys. With 15 questions of a kind, one question is about 7 points. Read the table as "most", "about half" and "few", not as rates. **Not a number to print.**
+- The question writer had read the notes, so the two rephrasings may be better than a real AI's. The gain from three wordings could be somewhat generous.
+- The vault is unusual: one subject, private slang, and many near-duplicate notes. "The one best note" is often a judgment call, which is why two columns are shown.
+- A hit means the right note was listed. It does not mean the passage shown answered the question.
+- Not measured: any other vault, any other language, or a question writer who had not seen the notes.
 
 ## Measured again for the README
 

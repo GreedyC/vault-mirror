@@ -339,7 +339,7 @@ Measured, with the conditions beside every number. Nothing here is a promise for
 | 10 reworded (words the note does not use) | 9 of 10 | 10 of 10 |
 | 10 exact (the note's own words) | 10 of 10 | 10 of 10 |
 
-That is too small to generalise from. It did not hold at full size. On a 2,082-note vault, 45 questions by one author: a question sharing no words with the note had it in the top eight by meaning in 1 of 15 with one wording and 10 of 15 with three; a question sharing a few words, 9 of 15 (a right note in 14 of 15); an exact phrase, 10 of 10. That vault is private, so a reader cannot repeat that run. For the small check, full tables, the questions file and the commands to measure again are in [`docs/BENCHMARKS.md`](docs/BENCHMARKS.md).
+That is too small to generalise from, and it did not hold on a much larger vault. It works best when your question shares a word or two with the note. Sending two or three wordings in one call helps a lot. It can miss, and then your AI searches the files. The measurements are in [`docs/BENCHMARKS.md`](docs/BENCHMARKS.md), with the full tables, the small check's questions file and the commands to measure again.
 
 ## Settings (you can leave these alone)
 

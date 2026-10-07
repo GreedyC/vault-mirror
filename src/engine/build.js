@@ -6,6 +6,7 @@ import path from 'node:path';
 import { acquireLock } from '../store/lock.js';
 import { ensureDir, writeFileAtomic, remove } from '../store/safe-write.js';
 import { readVectors } from '../store/sidecar.js';
+import { loadManifest } from '../store/manifest.js';
 import { createFlat, openFlat } from './ruvector-flat.js';
 import { createExact } from './exact.js';
 import { flatSelfTest } from './selftest.js';
@@ -50,6 +51,7 @@ export function exactFromSidecar(loaded, dimensions) {
  * @property {string[]} notices     plain sentences for the person
  * @property {string[]} warnings    codes such as VM_E_ENGINE_NOT_FLAT
  * @property {number} probeMs
+ * @property {{ dataDir: string, manifest: import('../store/manifest.js').Manifest }} loaded  what the engine was brought in step with; newer than the caller's when a sync finished meanwhile
  */
 
 /**
@@ -67,19 +69,24 @@ export function exactFromSidecar(loaded, dimensions) {
 export async function ensureEngine(ctx) {
   const started = Date.now();
   const deps = { probe: probeEngineFile, native: isNative, create: createFlat, open: openFlat, selfTest: flatSelfTest, ...(ctx.deps || {}) };
-  const { manifest } = ctx.loaded;
-  const want = manifest.totals.passages;
+  let loaded = ctx.loaded;
+  let { manifest } = loaded;
+  let want = manifest.totals.passages;
   const engineDir = path.join(ctx.indexDir, 'engine');
   /** @type {string[]} */
   const notices = []; const warnings = [];
   const secs = () => Math.round((Date.now() - started) / 100) / 10;
   const exact = (/** @type {string} */ why) => {
     notices.push(why);
-    return /** @type {EngineResult} */ ({ engine: exactFromSidecar(ctx.loaded, ctx.dimensions), how: 'exact', seconds: secs(), notices, warnings, probeMs: 0 });
+    return /** @type {EngineResult} */ ({ engine: exactFromSidecar(loaded, ctx.dimensions), how: 'exact', seconds: secs(), notices, warnings, probeMs: 0, loaded });
   };
   if (!deps.native()) return exact('The fast engine is not available on this computer, so the built-in exact search is being used. Results are the same.');
 
   await acquireLock(path.join(ctx.indexDir, 'index.lock'), { command: 'engine', waitMs: ctx.lockWaitMs ?? 30000, busyCode: 'VM_E_INDEX_BUSY' });
+  // A sync may have moved on while this reader waited for the lock. Build from what is saved now:
+  // an engine built from the older snapshot would carry the older stamp and make the next search reload it.
+  const saved = loadManifest(ctx.indexDir);
+  if (saved && saved.manifest.stamp !== manifest.stamp) { loaded = saved; manifest = saved.manifest; want = manifest.totals.passages; }
   ensureDir(engineDir);
   const cur = readCurrent(ctx.indexDir);
   const curFile = cur ? path.join(engineDir, cur.file) : null;
@@ -94,14 +101,14 @@ export async function ensureEngine(ctx) {
       if (!probe.ok) { damaged = true; debug(`engine probe failed: ${probe.reason}`); }
       else if (probe.flat && atStamp && probe.count === want) {
         const { engine } = await deps.open(curFile, ctx.dimensions);
-        return { engine, how: 'used', seconds: secs(), notices, warnings, probeMs };
+        return { engine, how: 'used', seconds: secs(), notices, warnings, probeMs, loaded };
       } else if (probe.flat && canApply && ctx.delta && probe.count === cur.count) {
         const { engine } = await deps.open(curFile, ctx.dimensions);
         await engine.remove(ctx.delta.removeIds);
         await engine.insert(ctx.delta.addRows);
         if ((await engine.count()) === want) {
           writeFileAtomic(path.join(engineDir, 'CURRENT'), JSON.stringify({ file: cur.file, stamp: manifest.stamp, count: want }));
-          return { engine, how: 'applied', seconds: secs(), notices, warnings, probeMs };
+          return { engine, how: 'applied', seconds: secs(), notices, warnings, probeMs, loaded };
         }
         debug('engine apply gave the wrong count; rebuilding'); // this process now holds that file open: build under a new name
       }
@@ -127,7 +134,7 @@ export async function ensureEngine(ctx) {
     return exact('The fast engine did not pass its own check, so the built-in exact search is being used. Results are the same.');
   }
   const ids = idTable(manifest);
-  const vectors = readVectors(ctx.loaded.dataDir, manifest.sidecar.vectors, ctx.dimensions);
+  const vectors = readVectors(loaded.dataDir, manifest.sidecar.vectors, ctx.dimensions);
   /** @type {import('./engine.js').Row[]} */
   let rows = [];
   for (let i = 0; i < ids.length; i++) {
@@ -150,5 +157,5 @@ export async function ensureEngine(ctx) {
   if (damaged) notices.push(`The index file was damaged. It was rebuilt from saved passages (${s.toFixed(1)} s). Your notes were not touched.`);
   else if (!ctx.quiet) notices.push(`The index was reloaded from saved passages (${s.toFixed(1)} s).`);
   debug(`engine ${damaged ? 'rebuilt after damage' : 'reloaded'} rows=${want} seconds=${s}`);
-  return { engine, how: damaged ? 'damaged' : 'rebuilt', seconds: s, notices, warnings, probeMs };
+  return { engine, how: damaged ? 'damaged' : 'rebuilt', seconds: s, notices, warnings, probeMs, loaded };
 }

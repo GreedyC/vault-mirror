@@ -2,7 +2,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { buildPlan, safetyStops, sha256 } from '../../src/sync/plan.js';
+import { buildPlan, safetyStops, syncWouldStop, sha256 } from '../../src/sync/plan.js';
+import { savedCounts } from '../../src/sync/run.js';
+import { printStatus } from '../../src/cli/commands/status.js';
 import { walkVault, noteKeyOf } from '../../src/vault/walk.js';
 import { readObsidianExcludes } from '../../src/vault/obsidian-registry.js';
 import { chunk } from '../../src/chunker/index.js';
@@ -134,6 +136,49 @@ test('safety stops: zero notes found, and mass removal with exclude changes coun
   assert.throws(() => safetyStops(excluded, m, { vaultPath: '/v' }), /12 notes/);
   const ten = await buildPlan({ ...fakeVault(Object.fromEntries(Object.entries(files).slice(0, 30))), manifest: m, chunk: chunkFn, now: NOW });
   safetyStops(ten, m, { vaultPath: '/v' }); // exactly 10 is allowed: the rule is more than 10 and more than 20%
+});
+
+test('status never sends a person to a sync that will refuse', async () => {
+  const files = {}; for (let i = 0; i < 40; i++) files[`N${i}.md`] = { text: body(`N${i}`) };
+  const m = manifestOf(files);
+  const shallow = (/** @type {any} */ v) => buildPlan({ ...v, manifest: m, shallow: true, chunk: () => { throw new Error('status never reads a note'); }, now: NOW });
+  // The view status prints, with a stand-in for everything but the plan.
+  const view = (/** @type {any} */ plan) => {
+    const lines = [];
+    const s = { inStep: false, running: null, checks: [], lastSync: null, versions: { model: 'm', tool: '0', ruvector: '0' }, _verify: false, _indexLooksWrong: false, _manifest: m, _leftOutTotal: 0, _stop: syncWouldStop(plan, m, { vaultPath: '/v' }),
+      counts: { notesOnDisk: plan.seen, leftOut: { excluded: 0, obsidianExcluded: 0, indexFalse: 0, empty: 0 }, otherFiles: 0, eligible: plan.eligible, notesIndexed: 40, passagesRecorded: 40, passagesInEngine: 40, pending: plan.pending, unreadable: 0 } };
+    printStatus(s, /** @type {any} */ ({ cfg: { vault: { exclude: [] } }, vault: { name: 'v', real: '/v' } }), /** @type {any} */ ({ out: (/** @type {string} */ l = '') => lines.push(l) }));
+    return lines.slice(-2);
+  };
+  // Zero notes found (a cloud folder that has not downloaded): sync stops, so status says what sync would.
+  assert.deepEqual(view(await shallow(fakeVault({}))), ['No notes were found in /v, but the index has 40. Nothing was changed.', 'Next: If the folder is on a cloud drive, let it finish downloading, then run it again.']);
+  // Mass removal, here by a new exclude that covers 30% of the notes.
+  const kept = Object.fromEntries(Object.entries(files).slice(0, 28));
+  const excluded = fakeVault(kept, { leftOut: Object.keys(files).slice(28).map((key) => ({ key, reason: 'excluded', size: 1, mtimeMs: 1, abs: `/v/${key}` })) });
+  assert.deepEqual(view(await shallow(excluded)), ['12 notes would leave the index since the last sync. Nothing was changed, in case that is a mistake.', 'Next: If that is what you want, run `vault-mirror sync --allow-mass-delete`.']);
+  assert.deepEqual(view(await shallow(fakeVault(kept))).pop(), 'Next: If that is what you want, run `vault-mirror sync --allow-mass-delete`.', 'the same for notes deleted from disk');
+  // Where sync will run, the next step is still sync: a few removals, and a folder rename (status cannot
+  // tell it from 12 removals and 12 new notes, but the sync will see renames and will not stop).
+  assert.deepEqual(view(await shallow(fakeVault(Object.fromEntries(Object.entries(files).slice(0, 35))))).pop(), 'Next: vault-mirror sync');
+  const moved = Object.fromEntries(Object.entries(files).map(([key, f], i) => [i < 28 ? key : `Moved/${key}`, f]));
+  const movedPlan = await shallow(fakeVault(moved));
+  assert.deepEqual([movedPlan.pending.removed, movedPlan.pending.new], [12, 12]);
+  assert.deepEqual(view(movedPlan).pop(), 'Next: vault-mirror sync');
+  safetyStops(await buildPlan({ ...fakeVault(moved), manifest: m, chunk: chunkFn, now: NOW }), m, { vaultPath: '/v' }); // and indeed it does not stop
+});
+
+test('a stopped run reports what it saved, not what it planned', async () => {
+  const before = { 'Old.md': { text: body('Old') }, 'Edit.md': { text: body('Edit') }, 'Edit2.md': { text: body('Edit2') }, 'Gone.md': { text: body('Gone') } };
+  const after = { 'Renamed.md': before['Old.md'], 'Edit.md': { text: body('Edit') + 'more\n', mtimeMs: 5000 }, 'Edit2.md': { text: body('Edit2') + 'more\n', mtimeMs: 5000 }, 'New1.md': { text: body('New1') }, 'New2.md': { text: body('New2') }, 'New3.md': { text: body('New3') } };
+  const m = manifestOf(before);
+  const plan = await buildPlan({ ...fakeVault(after), manifest: m, chunk: chunkFn, now: NOW });
+  const planned = { seen: 6, added: 3, updated: 2, renamed: 1, removed: 1, unchanged: 0, leftOut: 0, skipped: 0, otherFiles: 0 };
+  // The removals are done first; then the run is stopped after saving one new note and one edited note.
+  delete m.notes['Old.md']; delete m.notes['Gone.md'];
+  for (const key of ['New1.md', 'Edit.md']) m.notes[key] = { sha256: sha256(enc(after[key].text)) };
+  assert.deepEqual(savedCounts(planned, plan, m), { ...planned, added: 1, updated: 1, renamed: 0, removed: 2 });
+  for (const key of Object.keys(after)) m.notes[key] = { sha256: sha256(enc(after[key].text)) };
+  assert.deepEqual(savedCounts(planned, plan, m), planned, 'a run that saved everything reports the plan');
 });
 
 test('a note under a folder that could not be read is never treated as removed', async () => {

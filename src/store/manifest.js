@@ -76,6 +76,23 @@ export function loadManifest(indexDir) {
 }
 
 /**
+ * Run a reader's work against the live data folder. When that folder vanishes mid-read (a sync's
+ * tidy rewrite switched CURRENT and removed it), re-read CURRENT and run the work once more.
+ * @template T
+ * @param {string} indexDir
+ * @param {{ manifest: Manifest, dataDir: string }} loaded
+ * @param {(loaded: { manifest: Manifest, dataDir: string }) => T | Promise<T>} work
+ * @returns {Promise<T>}
+ */
+export async function withLiveData(indexDir, loaded, work) {
+  try { return await work(loaded); } catch (e) {
+    const fresh = /** @type {any} */ (e)?.code === 'ENOENT' ? loadManifest(indexDir) : null;
+    if (!fresh || fresh.dataDir === loaded.dataDir) throw e;
+    return work(fresh);
+  }
+}
+
+/**
  * @param {{ dataName: string, vault: Manifest['vault'], chunker: Manifest['chunker'], embedding: Record<string, any>, engine: Record<string, any> }} o
  * @returns {Manifest}
  */

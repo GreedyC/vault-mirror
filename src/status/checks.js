@@ -6,6 +6,7 @@ import { scanLog } from '../store/sidecar.js';
 import { liveOwner } from '../store/lock.js';
 import { planOnly, chunkerBlock, engineBlock } from '../sync/run.js';
 import { readProgress } from '../sync/progress.js';
+import { syncWouldStop } from '../sync/plan.js';
 import { ensureEngine, engineStamp, exactFromSidecar } from '../engine/build.js';
 import { probeEngineFile } from '../engine/probe.js';
 import { passageId } from '../engine/engine.js';
@@ -124,6 +125,6 @@ export async function computeStatus(ctx, opts, ui) {
     counts: { notesOnDisk: plan.seen, leftOut, otherFiles: plan.otherFiles, eligible: plan.eligible, notesIndexed, passagesRecorded, passagesInEngine, pending: plan.pending, unreadable: plan.skipped.length },
     checks, running, lastSync: manifest ? manifest.lastRun : null, versions,
     // Not part of the JSON contract: used for the human view.
-    _plan: plan, _leftOutTotal: leftOutTotal, _indexLooksWrong: indexLooksWrong && pendingTotal === 0, _verify: Boolean(opts.verify), _manifest: manifest, _dataDir: loaded ? loaded.dataDir : null,
+    _plan: plan, _stop: syncWouldStop(plan, manifest, { vaultPath: ctx.vault.real }), _leftOutTotal: leftOutTotal, _indexLooksWrong: indexLooksWrong && pendingTotal === 0, _verify: Boolean(opts.verify), _manifest: manifest, _dataDir: loaded ? loaded.dataDir : null,
   };
 }

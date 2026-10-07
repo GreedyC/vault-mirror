@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { configureWriter } from '../../src/store/safe-write.js';
 import { createDataDir, openSidecar, readRecord, readVectors, scanLog, LOG, VECTORS } from '../../src/store/sidecar.js';
-import { newManifest, saveManifest, loadManifest, switchCurrent, currentDataName, nextDataName } from '../../src/store/manifest.js';
+import { newManifest, saveManifest, loadManifest, switchCurrent, currentDataName, nextDataName, withLiveData } from '../../src/store/manifest.js';
 import { recover } from '../../src/store/recover.js';
 import { tidyRewrite, removeOrphans } from '../../src/store/rewrite.js';
 import { acquireLock, isStale, readLock, clearIfStale } from '../../src/store/lock.js';
@@ -133,6 +133,25 @@ test('a crash before the CURRENT switch leaves the old index readable; after it,
   assert.equal(readRecord(loaded.dataDir, loaded.manifest.notes['A.md'].log).passages[0].text, 'A.md text 2 0');
   assert.equal(removeOrphans(s.indexDir, 'data-0002'), 1);
   assert.equal(nextDataName('data-0009'), 'data-0010');
+});
+
+test('a reader that loaded the manifest before a tidy rewrite re-reads CURRENT and reads once more', async () => {
+  const s = setup();
+  commit(s, [put('A.md', 2, 1), put('B.md', 1, 2)]);
+  commit(s, [put('A.md', 2, 9)]); // an edit: the sync that saved it ends with a tidy rewrite
+  const reader = loadManifest(s.indexDir); // a search that started before the sync finished
+  tidyRewrite(s.indexDir, s.dataName, s.manifest, DIMS);
+  const read = (/** @type {any} */ l) => ({ from: path.basename(l.dataDir), text: readRecord(l.dataDir, l.manifest.notes['A.md'].log).passages[0].text, vectors: readVectors(l.dataDir, l.manifest.sidecar.vectors, DIMS).length / DIMS });
+  assert.throws(() => read(reader), { code: 'ENOENT' }, 'the folder the reader loaded is gone');
+  assert.deepEqual(await withLiveData(s.indexDir, reader, read), { from: 'data-0002', text: 'A.md text 9 0', vectors: 3 });
+  // Once only, and only for a folder that vanished: any other failure is passed on as it is.
+  let tries = 0;
+  await assert.rejects(withLiveData(s.indexDir, reader, () => { tries++; throw Object.assign(new Error('gone again'), { code: 'ENOENT' }); }), /gone again/);
+  assert.equal(tries, 2);
+  const live = loadManifest(s.indexDir); tries = 0;
+  await assert.rejects(withLiveData(s.indexDir, live, () => { tries++; throw Object.assign(new Error('some other file'), { code: 'ENOENT' }); }), /some other file/);
+  await assert.rejects(withLiveData(s.indexDir, reader, () => { tries++; throw new TypeError('a bug'); }), /a bug/);
+  assert.equal(tries, 2, 'no second try when the data folder did not change, or for another kind of error');
 });
 
 test('an unknown manifest schema stops with a message, never guesses', () => {

@@ -31,13 +31,6 @@ export function modelFiles(entry) {
   return { dir, model, tokenizer, modelStat: statOrNull(model), tokenizerStat: statOrNull(tokenizer) };
 }
 
-/** Bytes present in the model folder, for download progress. @param {string} dir */
-export function bytesPresent(dir) {
-  let total = 0;
-  try { for (const name of fs.readdirSync(dir)) total += statOrNull(path.join(dir, name))?.size || 0; } catch { /* not there yet */ }
-  return total;
-}
-
 /**
  * @typedef {object} Identity
  * @property {string} model

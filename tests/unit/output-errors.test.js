@@ -11,6 +11,8 @@ import path from 'node:path';
 import { createUi } from '../../src/cli/output.js';
 import { runSync } from '../../src/sync/run.js';
 import { configureWriter } from '../../src/store/safe-write.js';
+import os from 'node:os';
+import { debug, setLogDir, withoutHome } from '../../src/log.js';
 
 const BIN = fileURLToPath(new URL('../../bin/vault-mirror.js', import.meta.url));
 const run = (/** @type {string[]} */ args, env = {}) => spawnSync(process.execPath, [BIN, ...args], { encoding: 'utf8', env: { ...process.env, VAULT_MIRROR_HOME: tmpDir('out'), ...env } });
@@ -125,4 +127,20 @@ test('the busy error says how far the other sync is, also in --json', async () =
   await assert.rejects(runSync(ctx, { waitSeconds: 0 }, createUi({ json: true })), busy);
   fs.rmSync(path.join(indexDir, 'progress.json'));
   await assert.rejects(runSync(ctx, { waitSeconds: 0 }, createUi({ json: true })), (/** @type {any} */ e) => e.message === 'Another sync is still running. Nothing is wrong.', 'no percent when none is known');
+});
+
+test('the debug log, which a person may share, never holds the home folder and so never the account name', () => {
+  const home = tmpDir('log'); const logs = path.join(home, 'logs');
+  configureWriter({ home });
+  setLogDir(logs);
+  try {
+    // What an internal error writes: a stack trace whose frames name files under the home folder.
+    const stack = `Error: Failed to initialize ONNX embedder | at ${path.join(os.homedir(), 'tools', 'node_modules', 'ruvector', 'dist', 'core', 'onnx-embedder.js')}:363:25 | at ${path.join(os.homedir(), '.npm', 'lib', 'x.js')}:1:1`;
+    debug(`internal error in sync: ${stack}`);
+  } finally { setLogDir(null); }
+  const text = fs.readFileSync(path.join(logs, 'debug.log'), 'utf8');
+  assert.ok(!text.includes(os.homedir()), text);
+  assert.ok(!text.includes(os.userInfo().username) || !os.homedir().includes(os.userInfo().username), text);
+  assert.match(text, / at ~[\\/]tools[\\/]node_modules[\\/]ruvector[\\/]dist[\\/]core[\\/]onnx-embedder\.js:363:25 /, 'the rest of the trace is kept');
+  assert.equal(withoutHome('no path here'), 'no path here');
 });

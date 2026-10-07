@@ -74,6 +74,9 @@ test('an init failure ends the run and is not retried', async () => {
   await assert.rejects(e.init(), (err) => err instanceof VmError && err.code === 'VM_E_MODEL_OFFLINE');
   assert.equal(tries, 1, 'the library caches a failed init; a second try cannot succeed');
   assert.equal(isHeld(), false);
+  // The library's own sentence when the model host answers with an error status (a web filter, a busy server).
+  const refused = createEmbedder({ model: 'all-MiniLM-L6-v2', lib: fakeLib({ async initOnnxEmbedder() { throw new Error('Failed to initialize ONNX embedder: Failed to fetch https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2/resolve/main/onnx/model.onnx: 503 '); } }) });
+  await assert.rejects(refused.init(), (err) => err instanceof VmError && err.code === 'VM_E_MODEL_OFFLINE');
   const broken = createEmbedder({ model: 'all-MiniLM-L6-v2', lib: fakeLib({ async initOnnxEmbedder() { throw new Error('Failed to initialize ONNX embedder: undefined'); } }) });
   await assert.rejects(broken.init(), (err) => err instanceof VmError && err.code === 'VM_E_MODEL_BROKEN' && /Delete the folder/.test(err.next));
 });

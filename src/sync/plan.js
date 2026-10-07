@@ -183,3 +183,19 @@ export function safetyStops(plan, manifest, o) {
   if (indexed > 0 && plan.seen === 0) throw new VmError('VM_E_VAULT_EMPTY', { path: o.vaultPath, indexed: indexed.toLocaleString('en-US') });
   if (!o.allowMassDelete && plan.leaving > 10 && plan.leaving > indexed * 0.2) throw new VmError('VM_E_MASS_DELETE', { count: plan.leaving.toLocaleString('en-US') });
 }
+
+/**
+ * Would a sync started now stop at a safety stop? Asked by status, whose plan never reads a note and
+ * so cannot tell a rename from a removal plus an addition: only the removals that no new note could
+ * account for are counted, so this never names a stop the sync would not make.
+ * @param {Plan} plan    a shallow plan
+ * @param {import('../store/manifest.js').Manifest | null} manifest
+ * @param {{ vaultPath: string }} o
+ * @returns {VmError | null}
+ */
+export function syncWouldStop(plan, manifest, o) {
+  try { safetyStops({ ...plan, leaving: Math.max(0, plan.pending.removed - plan.pending.new) }, manifest, o); return null; } catch (e) {
+    if (e instanceof VmError) return e;
+    throw e;
+  }
+}

@@ -42,7 +42,9 @@ export function printStatus(s, ctx, ui) {
   if (!s.inStep && !s.running) {
     const failed = s.checks.filter((/** @type {any} */ k) => !k.ok);
     if (s._verify) for (const k of failed) ui.out(`  not ok: ${k.name} (${k.detail})`);
-    ui.out(`Next: ${s._indexLooksWrong ? 'vault-mirror rebuild' : 'vault-mirror sync'}`);
+    // Never send a person to a sync that will refuse: say what it would say, and its own next step.
+    if (s._stop && !s._indexLooksWrong) { ui.out(s._stop.message); ui.out(`Next: ${s._stop.next}`); }
+    else ui.out(`Next: ${s._indexLooksWrong ? 'vault-mirror rebuild' : 'vault-mirror sync'}`);
   }
 }
 
@@ -80,7 +82,7 @@ export async function statusCommand(args, ui) {
     ui.out(flagged.length ? 'Passages the screen flagged (the matched text is never shown):' : 'The screen flagged nothing.');
     for (const f of flagged) ui.out(`  ${f.path}:${f.line}  ${f.rule}`);
   }
-  const { _plan, _leftOutTotal, _indexLooksWrong, _verify, _manifest, _dataDir, ...body } = s;
-  void _plan; void _leftOutTotal; void _indexLooksWrong; void _verify; void _manifest; void _dataDir;
+  const { _plan, _stop, _leftOutTotal, _indexLooksWrong, _verify, _manifest, _dataDir, ...body } = s;
+  void _plan; void _stop; void _leftOutTotal; void _indexLooksWrong; void _verify; void _manifest; void _dataDir;
   return { vault: { name: ctx.vault.name, path: ctx.vault.real }, body: { ...body, ...extra } };
 }

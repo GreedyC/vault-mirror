@@ -1,7 +1,7 @@
 // @ts-check
 // Search: ask the index, return the best passage of each note with a way back to the note.
 import path from 'node:path';
-import { loadManifest } from '../store/manifest.js';
+import { loadManifest, withLiveData } from '../store/manifest.js';
 import { readRecord } from '../store/sidecar.js';
 import { liveOwner } from '../store/lock.js';
 import { ensureEngine } from '../engine/build.js';
@@ -67,6 +67,16 @@ export async function fetchNotes(engine, vectors, count, known) {
 }
 
 /**
+ * What a search that was told not to sync can still say. It never looks at the vault, but the index
+ * records whether its last sync ran to the end: after a stopped or killed sync, part of the vault is missing.
+ * @param {import('../store/manifest.js').Manifest} manifest
+ * @returns {string | null}
+ */
+export function unfinishedNotice(manifest) {
+  return manifest.lastRun && manifest.lastRun.complete ? null : 'The last sync did not finish. This search covers what is indexed so far. Next: vault-mirror sync --detach';
+}
+
+/**
  * @param {import('../sync/run.js').Context} ctx
  * @param {{ queries: string[], count?: number, noSync?: boolean }} opts
  * @param {import('../cli/output.js').Ui} ui
@@ -100,20 +110,21 @@ export async function runSearch(ctx, opts, ui) {
       else if (e instanceof VmError && e.exitCode === 4) syncNotice = `${e.message} This search covers what is indexed so far.`;
       else throw e;
     }
-  }
+  } else syncNotice = unfinishedNotice(loaded.manifest);
   timings.syncMs = Math.round(performance.now() - t0);
-  const { manifest, dataDir } = loaded;
-  const dimensions = Number(manifest.embedding.dimensions);
+  const first = loaded;
+  const dimensions = Number(first.manifest.embedding.dimensions);
 
   // The engine probe runs in a child process while this process loads the model and reads the question.
   let t = performance.now();
+  const engineFor = (/** @type {{ manifest: import('../store/manifest.js').Manifest, dataDir: string }} */ l) => ensureEngine({ indexDir: ctx.indexDir, loaded: l, dimensions });
   // A quick sync that did real work already opened the engine in this process. The file's lock is held until
   // exit, so a probe child could not open it: use that handle.
   const enginePromise = syncEngine
-    ? Promise.resolve(/** @type {import('../engine/build.js').EngineResult} */ ({ engine: syncEngine, how: 'used', seconds: 0, notices: [], warnings: [], probeMs: 0 }))
-    : ensureEngine({ indexDir: ctx.indexDir, loaded: { manifest, dataDir }, dimensions });
+    ? Promise.resolve(/** @type {import('../engine/build.js').EngineResult} */ ({ engine: syncEngine, how: 'used', seconds: 0, notices: [], warnings: [], probeMs: 0, loaded: first }))
+    : engineFor(first);
   enginePromise.catch(() => {}); // handled below
-  const embedder = createEmbedder({ model: String(manifest.embedding.model), debug, notice: (line) => ui.info(line) });
+  const embedder = createEmbedder({ model: String(first.manifest.embedding.model), debug, notice: (line) => ui.info(line) });
   /** @type {Float32Array[]} */
   const vectors = [];
   try {
@@ -121,41 +132,48 @@ export async function runSearch(ctx, opts, ui) {
     for (const q of opts.queries) vectors.push(await embedder.embedQuery(q));
   } finally { await embedder.shutdown(); }
   timings.modelAndEmbedMs = Math.round(performance.now() - t);
-  t = performance.now();
-  const eng = await enginePromise;
-  timings.engineMs = Math.round(performance.now() - t); timings.probeMs = eng.probeMs;
-  for (const n of eng.notices) ui.warn(n);
-  for (const w of eng.warnings) ui.warnings.push(w);
-
-  t = performance.now();
-  const known = (/** @type {string} */ id) => { const { path: p, n } = parseId(id); const e = manifest.notes[p]; return Boolean(e) && n >= 0 && n < e.passages; };
-  const notes = await fetchNotes(eng.engine, vectors, count, known);
-  timings.searchMs = Math.round(performance.now() - t);
-
-  t = performance.now();
   const registry = lookupVault(ctx.vault.real);
   if (registry.state !== 'registered' && !(registry.state === 'no-list' && registry.vaultParam)) ui.warn('Open this folder as a vault in Obsidian once, and links will work.');
-  const results = notes.map((hit, i) => {
-    const rec = readRecord(dataDir, manifest.notes[hit.path].log);
-    const p = rec.passages[hit.n];
-    const text = maskSecrets(p.text);
-    return {
-      rank: i + 1,
-      score: Math.round(hit.score * 1000) / 1000,
-      note: (hit.path.split('/').pop() || '').replace(/\.md$/i, ''),
-      section: p.trail.join(' > '),
-      path: path.join(ctx.vault.real, ...hit.path.split('/')),
-      vaultPath: hit.path,
-      line: p.line,
-      link: buildLink({ vaultParam: registry.vaultParam, vaultPath: hit.path, heads: p.heads || [], repeats: Boolean(p.rep), recovered: Boolean(p.recovered) }),
-      snippet: snippet(text),
-      text,
-      passage: `${hit.path}#${hit.n}`,
-      morePassages: hit.morePassages,
-      flags: p.flags || [],
-    };
+
+  // A sync that replaced or removed a note ends with a tidy rewrite, which removes the data folder this
+  // search loaded. Everything that reads that folder runs here, so it is re-read from CURRENT and run once more.
+  const { eng, manifest, results } = await withLiveData(ctx.indexDir, first, async (l) => {
+    t = performance.now();
+    const eng = await (l === first ? enginePromise : engineFor(l));
+    timings.engineMs = Math.round(performance.now() - t); timings.probeMs = eng.probeMs;
+    const { manifest, dataDir } = eng.loaded; // the manifest the engine was brought in step with
+
+    t = performance.now();
+    const known = (/** @type {string} */ id) => { const { path: p, n } = parseId(id); const e = manifest.notes[p]; return Boolean(e) && n >= 0 && n < e.passages; };
+    const notes = await fetchNotes(eng.engine, vectors, count, known);
+    timings.searchMs = Math.round(performance.now() - t);
+
+    t = performance.now();
+    const results = notes.map((hit, i) => {
+      const rec = readRecord(dataDir, manifest.notes[hit.path].log);
+      const p = rec.passages[hit.n];
+      const text = maskSecrets(p.text);
+      return {
+        rank: i + 1,
+        score: Math.round(hit.score * 1000) / 1000,
+        note: (hit.path.split('/').pop() || '').replace(/\.md$/i, ''),
+        section: p.trail.join(' > '),
+        path: path.join(ctx.vault.real, ...hit.path.split('/')),
+        vaultPath: hit.path,
+        line: p.line,
+        link: buildLink({ vaultParam: registry.vaultParam, vaultPath: hit.path, heads: p.heads || [], repeats: Boolean(p.rep), recovered: Boolean(p.recovered) }),
+        snippet: snippet(text),
+        text,
+        passage: `${hit.path}#${hit.n}`,
+        morePassages: hit.morePassages,
+        flags: p.flags || [],
+      };
+    });
+    timings.readMs = Math.round(performance.now() - t);
+    return { eng, manifest, results };
   });
-  timings.readMs = Math.round(performance.now() - t);
+  for (const n of eng.notices) ui.warn(n);
+  for (const w of eng.warnings) ui.warnings.push(w);
   const tookMs = Math.round(performance.now() - t0);
   runLine('search', { results: results.length, phrasings: opts.queries.length, ms: tookMs }); // never the question text
   return { query: opts.queries[0], queries: opts.queries, results, searched: { notes: manifest.totals.notes, passages: manifest.totals.passages }, inStep, syncNotice, tookMs, timings, engine: eng.engine.name };

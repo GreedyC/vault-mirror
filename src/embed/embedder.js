@@ -1,7 +1,7 @@
 // @ts-check
 // Builds an Embedder from the model table. The rest of the tool talks to this interface only.
 import { modelEntry } from './models.js';
-import { modelFiles, readIdentity, loadCounter, bytesPresent, isTested } from './model.js';
+import { modelFiles, readIdentity, loadCounter, isTested } from './model.js';
 import { createPool, createStallWatch } from './pool.js';
 import { hold, release } from './quiet.js';
 import { VmError } from '../errors.js';
@@ -47,6 +47,7 @@ export function vectorProblem(vec, dimensions) {
  * @param {any} [opts.lib]                             the embedding library; tests pass a fake
  * @param {(line: string) => void} [opts.debug]        receives library chatter and events
  * @param {(line: string) => void} [opts.notice]       one-line notices for the person
+ * @param {{ everyMs?: number, stallMs?: number }} [opts.watch]  the download watchdog's clock; tests shorten it
  * @returns {Embedder}
  */
 export function createEmbedder(opts) {
@@ -69,38 +70,68 @@ export function createEmbedder(opts) {
   /** @type {ReturnType<typeof createStallWatch> | null} */
   let stall = null;
 
-  /** Translate the library's two raw errors. They are never shown. @param {any} e */
+  /** Translate the library's raw errors. They are never shown. @param {any} e */
   function translate(e) {
     const text = String(e && e.message ? e.message : e);
     debug(`embedder error: ${text.slice(0, 200)}`);
     if (/fetch failed\s*$/.test(text)) return new VmError('VM_E_MODEL_OFFLINE');
+    // The host answered, but not with the file (a web filter's 403, a 429, a 503): "Failed to fetch <url>: 503 <status text>".
+    if (/Failed to fetch \S+: \d{3}( |$)/.test(text)) return new VmError('VM_E_MODEL_OFFLINE');
     if (/undefined\s*$/.test(text)) return new VmError('VM_E_MODEL_BROKEN', { path: modelFiles(entry).dir });
     return e;
   }
 
-  /** Let the library download while a watchdog watches the folder grow. */
+  /**
+   * Let the library download while a watchdog counts the bytes that arrive. The library keeps the whole
+   * file in memory and writes it to disk in one call at the end, so the model folder stays empty for the
+   * whole transfer: a slow download can only be told from a stalled one on the network side. The
+   * library's requests are counted on their way through `fetch`; nothing about them is changed.
+   */
   async function initWithWatchdog(/** @type {number} */ maxLength) {
     const files = modelFiles(entry);
-    const missing = !files.modelStat || !files.tokenizerStat;
-    /** @type {NodeJS.Timeout | undefined} */
-    let timer;
-    /** @type {Promise<never> | null} */
-    let stalled = null;
-    if (missing) {
-      notice(`Downloading the reading model once (about ${entry.downloadMB} MB). After this, everything runs on your computer.`);
-      let lastBytes = bytesPresent(files.dir); let lastGrowth = Date.now();
-      stalled = new Promise((_, reject) => {
-        timer = setInterval(() => {
-          const now = bytesPresent(files.dir);
-          if (now > lastBytes) { lastBytes = now; lastGrowth = Date.now(); notice(`Downloaded ${Math.round(now / 1e6)} MB so far.`); }
-          else if (Date.now() - lastGrowth > 60000) reject(new VmError('VM_E_MODEL_OFFLINE'));
-        }, 5000);
+    if (files.modelStat && files.tokenizerStat) { await lib.initOnnxEmbedder({ maxLength }); return; }
+    notice(`Downloading the reading model once (about ${entry.downloadMB} MB). After this, everything runs on your computer.`);
+    const everyMs = opts.watch?.everyMs ?? 5000; const stallMs = opts.watch?.stallMs ?? 60000;
+    const realFetch = globalThis.fetch;
+    let received = 0; let inFlight = 0;
+    if (typeof realFetch === 'function') {
+      globalThis.fetch = /** @type {typeof fetch} */ (async (input, init) => {
+        inFlight++;
+        /** @type {Response} */
+        let res;
+        try { res = await realFetch(input, init); } catch (e) { inFlight--; throw e; }
+        if (!res.body) { inFlight--; return res; }
+        const counted = res.body.pipeThrough(new TransformStream({
+          transform(chunk, controller) { received += chunk.byteLength; controller.enqueue(chunk); },
+          flush() { inFlight--; },
+        }));
+        return new Response(counted, { status: res.status, statusText: res.statusText, headers: res.headers });
       });
     }
+    /** @type {NodeJS.Timeout | undefined} */
+    let timer;
+    let shownMB = 0; let lastBytes = 0; let lastGrowth = Date.now(); let told = false;
+    /** @type {Promise<never>} */
+    const stalled = new Promise((_, reject) => {
+      timer = setInterval(() => {
+        const quiet = Date.now() - lastGrowth;
+        if (received > lastBytes) {
+          lastBytes = received; lastGrowth = Date.now(); told = false;
+          const mb = Math.floor(received / 1e6);
+          if (mb >= shownMB + 10) { shownMB = mb; notice(`Downloaded ${mb} MB so far.`); } // a line every 10 MB: a handful in all
+        } else if (inFlight === 0) lastGrowth = Date.now(); // nothing is on its way: the library is saving or loading the file
+        else if (quiet > stallMs) reject(new VmError('VM_E_MODEL_OFFLINE'));
+        else if (!told && quiet >= stallMs / 3) { told = true; notice(`No data has arrived for ${Math.round(quiet / 1000)} s. Still waiting; this stops by itself at ${Math.round(stallMs / 1000)} s.`); }
+      }, everyMs);
+    });
     try {
-      const work = lib.initOnnxEmbedder({ maxLength });
-      await (stalled ? Promise.race([work, stalled]) : work);
-    } finally { if (timer) clearInterval(timer); }
+      const work = Promise.resolve(lib.initOnnxEmbedder({ maxLength }));
+      work.catch(() => {}); // if the watchdog gives up first, a later failure of the abandoned download has nowhere to go
+      await Promise.race([work, stalled]);
+    } finally {
+      clearInterval(timer);
+      if (typeof realFetch === 'function') globalThis.fetch = realFetch;
+    }
   }
 
   /** @type {Embedder} */

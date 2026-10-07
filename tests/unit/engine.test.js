@@ -113,6 +113,23 @@ test('a healthy probe means the existing file is used; a stale stamp means a rel
   assert.match(stale.notices[0], /^The index was reloaded from saved passages \(\d+\.\d s\)\.$/);
 });
 
+test('a reader holding an older manifest brings the engine in step with the saved one, and says which it used', async () => {
+  const s = setup();
+  const reader = structuredClone(s.loaded); // a search loaded this, then waited for the index lock
+  delete s.loaded.manifest.notes['A.md']; // meanwhile a sync removed a note and saved
+  saveManifest(s.loaded.dataDir, s.loaded.manifest);
+  await ensureEngine({ indexDir: s.indexDir, loaded: s.loaded, dimensions: DIMS, deps: s.deps, quiet: true });
+  assert.equal(engineStamp(s.indexDir).stamp, s.loaded.manifest.stamp);
+  assert.notEqual(reader.manifest.stamp, s.loaded.manifest.stamp);
+  let built = 0;
+  const r = await ensureEngine({ indexDir: s.indexDir, loaded: reader, dimensions: DIMS, deps: { ...s.deps, create: async (file) => { built++; return s.deps.create(file); }, probe: async () => ({ ok: true, count: 3, flat: true, reason: null, ms: 1 }) } });
+  assert.equal(r.how, 'used', 'the engine the sync left is used as it is');
+  assert.equal(built, 0, 'nothing is rebuilt from the older snapshot');
+  assert.equal(engineStamp(s.indexDir).stamp, s.loaded.manifest.stamp, 'and the older stamp is never written back');
+  assert.equal(r.loaded.manifest.stamp, s.loaded.manifest.stamp, 'the caller is handed the manifest the engine matches');
+  assert.deepEqual(Object.keys(r.loaded.manifest.notes), ['B.md']);
+});
+
 test('the self-test fails closed on a missing null config and on a duplicated id', async () => {
   const notFlat = (/** @type {any} */ e) => e.code === 'VM_E_ENGINE_NOT_FLAT';
   await flatSelfTest(memoryEngine(), DIMS, () => true);

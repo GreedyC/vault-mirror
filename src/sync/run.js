@@ -79,6 +79,27 @@ export async function planOnly(ctx, o) {
 }
 
 /**
+ * What a stopped run really did. Its plan counted every note it meant to read; only the notes whose
+ * new passages were saved count as added, updated or renamed.
+ * @template {{ added: number, updated: number, renamed: number, removed: number }} C
+ * @param {C} counts
+ * @param {Pick<import('./plan.js').Plan, 'toEmbed' | 'renamed' | 'removed' | 'dropped'>} plan
+ * @param {Pick<import('../store/manifest.js').Manifest, 'notes'>} manifest
+ * @returns {C}
+ */
+export function savedCounts(counts, plan, manifest) {
+  const saved = new Set(plan.toEmbed.filter((n) => manifest.notes[n.key]?.sha256 === n.sha256).map((n) => n.key));
+  const renamedTo = new Set(plan.renamed.map((r) => r.to));
+  const renamed = plan.renamed.filter((r) => saved.has(r.to)).length;
+  return {
+    ...counts, renamed,
+    added: plan.toEmbed.filter((n) => n.kind === 'added' && !renamedTo.has(n.key) && saved.has(n.key)).length,
+    updated: plan.toEmbed.filter((n) => n.kind === 'updated' && saved.has(n.key)).length,
+    removed: plan.removed.length - renamed + plan.dropped.length,
+  };
+}
+
+/**
  * @param {Context} ctx
  * @param {object} opts
  * @param {number | 'auto'} [opts.workers]
@@ -281,13 +302,14 @@ export async function runSync(ctx, opts, ui) {
       const complete = !stopRequested || notesDone === plan.toEmbed.length;
       counts.skipped = skippedNotes.length;
       const seconds = () => Math.round((Date.now() - started) / 100) / 10;
+      const did = complete ? counts : savedCounts(counts, plan, manifest);
       if (work > 0 || bookkeeping) {
-        if (work > 0) manifest.lastRun = { at: new Date().toISOString(), seconds: seconds(), complete, counts };
+        if (work > 0) manifest.lastRun = { at: new Date().toISOString(), seconds: seconds(), complete, counts: did };
         manifest.engine = engineBlock();
         saveManifest(dataDir, manifest, false);
       }
       if (!complete) {
-        runLine('sync', { seen: counts.seen, added: counts.added, updated: counts.updated, renamed: counts.renamed, removed: counts.removed, unchanged: counts.unchanged, left_out: counts.leftOut, skipped: counts.skipped, passages: manifest.totals.passages, embedded, seconds: seconds(), result: 'stopped', v: TOOL_VERSION });
+        runLine('sync', { seen: did.seen, added: did.added, updated: did.updated, renamed: did.renamed, removed: did.removed, unchanged: did.unchanged, left_out: did.leftOut, skipped: did.skipped, passages: manifest.totals.passages, embedded, seconds: seconds(), result: 'stopped', v: TOOL_VERSION });
         throw new VmError('VM_E_STOPPED', { done: num(notesDone), total: num(plan.toEmbed.length) });
       }
 

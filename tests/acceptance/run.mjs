@@ -274,6 +274,27 @@ await step('Q1', 'edit one note; search with no sync in between', () => {
   return `${s.ms} ms, engine ${s.json.timings.engineMs} ms`;
 });
 
+await step('Q2', 'edit one note; five searches at once', async () => {
+  // One search does the quick sync, which ends with a tidy rewrite: the data folder the others loaded is
+  // removed while they read. Each of them must re-read CURRENT and answer, never fail.
+  let wrong = 0; let total = 0;
+  for (let round = 0; round < 4; round++) {
+    edit('Kitchen/Pickles.md', (t) => `${t}\nRound ${round}: the brine crock sits beside the mauve barometer.\n`); accept();
+    const started = [];
+    for (let i = 0; i < 5; i++) { started.push(vmStart(['search', 'where does the brine crock sit, near the barometer', '--json'])); await sleep(40); }
+    for (const s of /** @type {any[]} */ (await Promise.all(started.map((x) => x.done)))) {
+      total++;
+      /** @type {any} */
+      let json = null; try { json = JSON.parse(s.stdout); } catch { json = null; }
+      if (s.status !== 0 || !json || !json.ok || !json.results.length) { wrong++; notes.push(`step Q2: a search during a sync exited ${s.status} ${json && json.error ? json.error.code : s.stderr.slice(0, 120)}`); }
+    }
+    assertVaultUntouched('five searches at once');
+  }
+  eq(wrong, 0, 'searches that failed while another one synced');
+  eq(vm(['status', '--json']).json.inStep, true, 'in step afterwards');
+  return `${total} searches across 4 edits, none failed`;
+});
+
 await step(7, 'delete one note; sync', () => {
   const idx = readIndex(MAIN);
   const had = idx.manifest.notes['Travel/Packing list.md'].passages; const total = idx.manifest.totals.passages;

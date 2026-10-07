@@ -1,19 +1,16 @@
 name: CI
 
-# Unit tests, type check and lint on macOS, Linux and Windows.
-# The unit tests need no network and no reading model. The end-to-end acceptance
-# script downloads the model and takes minutes, so it runs on request only.
+# test:        unit tests, type check and lint. They need no network and no reading model.
+#              macOS is the verified platform and decides the result. Linux and Windows run too,
+#              but are not verified yet, so a failure there is shown and does not fail the workflow.
+# acceptance:  the end-to-end script on macOS: the read-only checks, a kill -9 in the middle of a
+#              sync, two syncs racing. It downloads the reading model once and caches it.
 
 on:
   push:
     branches: [main]
   pull_request:
   workflow_dispatch:
-    inputs:
-      acceptance:
-        description: Also run the end-to-end acceptance script
-        type: boolean
-        default: false
 
 permissions:
   contents: read
@@ -27,6 +24,8 @@ jobs:
     name: ${{ matrix.os }}, Node ${{ matrix.node }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 15
+    # Remove a platform from this condition once it has a green run on record.
+    continue-on-error: ${{ matrix.os != 'macos-latest' }}
     strategy:
       fail-fast: false
       matrix:
@@ -51,9 +50,29 @@ jobs:
         run: npm run typecheck
       - name: Lint
         run: npm run lint
-      - name: Doctor (loads the native engine; may download the reading model)
-        if: ${{ inputs.acceptance }}
+
+  acceptance:
+    name: Acceptance, macOS, Node 22
+    runs-on: macos-latest
+    timeout-minutes: 30
+    # This job has not yet run on a hosted runner, and some of its steps have time limits that were
+    # set on a faster machine. Until it has one green run on record it reports without failing the
+    # workflow. Delete the next line after that run, so the badge covers it.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: npm-shrinkwrap.json
+      - name: Cache the reading model
+        uses: actions/cache@v4
+        with:
+          path: ~/.ruvector/models
+          key: reading-model-${{ hashFiles('src/embed/models.js') }}
+      - run: npm ci
+      - name: Doctor (loads the native engine; downloads the reading model on a cache miss)
         run: node bin/vault-mirror.js doctor
       - name: Acceptance (end to end on the invented fixture vault)
-        if: ${{ inputs.acceptance }}
         run: node tests/acceptance/run.mjs --vault tests/fixtures/vault

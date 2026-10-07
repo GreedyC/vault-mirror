@@ -17,7 +17,7 @@ The first release.
 - `search`: one call returns two lists, by meaning and by exact words. Several wordings can be passed in one call. Every result carries the note, heading trail, file path, line, an `obsidian://` link and the full passage.
 - `status`: the 1:1 proof, as nine named checks. `--verify` fingerprints every note and checks every passage in the engine; `--list` and `--screen` name what is left out or flagged.
 - `rebuild`: rebuilds the index from saved passages without re-reading a note. `--full` re-reads everything.
-- `doctor`: checks Node, the engine, the pinned versions, the model, the disk and the vault, and ends with one next step.
+- `doctor`: checks Node, the engine, the pinned versions, the model, the disk and the vault, and ends with one next step, or says the vault is in step.
 - The read-only guarantee: one module may read vault paths and has no write call; one module may write and refuses any path inside a vault. Tested by before-and-after checksum listings, a read-only vault on disk, a write spy and a static scan.
 - A safety screen that flags passages that look like they hold a key or password and masks them in results.
 - `--json` on every command: one object, a stable shape, plain error codes with one next action each.

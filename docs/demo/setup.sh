@@ -18,7 +18,7 @@ DEMO="${VM_DEMO_HOME:-/tmp/vm-demo}"
 REAL_HOME="$HOME"
 
 rm -rf "$DEMO"
-mkdir -p "$DEMO/bin" "$DEMO/project" "$DEMO/Library/Application Support/obsidian" "$DEMO/.config/obsidian"
+mkdir -p "$DEMO/bin" "$DEMO/my-project" "$DEMO/Library/Application Support/obsidian" "$DEMO/.config/obsidian"
 DEMO="$(cd "$DEMO" && pwd -P)"   # on macOS /tmp is a link to /private/tmp
 
 cp -R "$REPO/tests/fixtures/vault" "$DEMO/garden-notes"
@@ -32,7 +32,7 @@ LIST="{\"vaults\":{\"a1b2c3d4e5f60718\":{\"path\":\"$DEMO/garden-notes\",\"ts\":
 printf '%s\n' "$LIST" > "$DEMO/Library/Application Support/obsidian/obsidian.json"   # macOS
 printf '%s\n' "$LIST" > "$DEMO/.config/obsidian/obsidian.json"                        # Linux
 
-cd "$DEMO/project"
+cd "$DEMO/my-project"
 HOME="$DEMO" "$DEMO/bin/vault-mirror" init "$DEMO/garden-notes"
 echo
 echo "Sandbox ready at $DEMO. Now run: vhs docs/demo/demo.tape"

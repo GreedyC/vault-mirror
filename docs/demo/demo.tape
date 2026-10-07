@@ -9,10 +9,10 @@
 Output docs/demo/demo.gif
 
 Set Shell zsh
-Set FontSize 18
-Set Width 1330
+Set FontSize 16
+Set Width 1340
 Set Height 500
-Set Padding 28
+Set Padding 24
 Set WindowBar Colorful
 Set TypingSpeed 22ms
 Set CursorBlink false
@@ -23,7 +23,7 @@ Env HOME "/private/tmp/vm-demo"
 
 Hide
 Type "export PATH=$HOME/bin:$PATH PROMPT='%F{magenta}$%f '" Enter
-Type "cd ~/project && clear" Enter
+Type "cd ~/my-project && clear" Enter
 Show
 
 # 1. The first sync, then a second one that finds nothing to do.

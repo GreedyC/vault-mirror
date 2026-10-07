@@ -40,8 +40,8 @@
   <g text-anchor="middle" fill="#9198a1" font-size="15">
     <text x="212" y="68">sync</text>
     <text x="450" y="68">store</text>
-    <text x="688" y="52">question</text>
-    <text x="688" y="120">passages</text>
+    <text x="688" y="52" font-size="12">question</text>
+    <text x="688" y="120" font-size="12">passages</text>
   </g>
 
   <!-- the link back -->
@@ -77,7 +77,7 @@
 
   <!-- three habits -->
   <g font-size="15" fill="#9198a1">
-    <text x="8" y="384"><tspan fill="#f0f6fc" font-weight="600">Kept state</tspan>  a manifest of every note</text>
+    <text x="8" y="384"><tspan fill="#f0f6fc" font-weight="600">Kept state</tspan>  a record of every note</text>
     <text x="306.4" y="384"><tspan fill="#f0f6fc" font-weight="600">Idempotent</tspan>  a second run changes nothing</text>
     <text x="694" y="384"><tspan fill="#f0f6fc" font-weight="600">Logged</tspan>  one line per run</text>
   </g>

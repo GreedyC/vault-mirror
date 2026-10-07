@@ -80,7 +80,7 @@ The six stages of the house pattern map onto modules: Trigger (`cli`), Extract (
 | Not dependencies | No YAML library, no argument parser (`node:util.parseArgs`), no test framework (`node:test`), no colour library |
 | Dev dependencies | `typescript` (type check only), `eslint` |
 | Loading ruvector | One file, `src/engine/ruvector-loader.js`, uses `createRequire` to load the CommonJS package. It deletes `RUVECTOR_BACKEND` from the environment first (the value `rvf` crashes the import), and the tool has no `--backend` flag. ruvector is used as a library only: the tool never runs a `ruvector` command, never `hooks init`, never `mcp start`, and never changes the current folder to the vault |
-| Install | `npm install -g github:HeroForgeAI/vault-mirror#v0.1.0`, then `vault-mirror doctor`. Needs git and Node. If npm reports a permission error (`EACCES`), the README gives the one fix: `npm config set prefix ~/.npm-global`, add `~/.npm-global/bin` to the path, install again; never `sudo` |
+| Install | `npm install -g github:HeroForgeAI/vault-mirror#v0.1.0`, then `vault-mirror doctor`. Needs git and Node. If npm reports a permission error (`EACCES`), `docs/TROUBLESHOOTING.md` gives the one fix: `npm config set prefix ~/.npm-global`, add `~/.npm-global/bin` to the path, install again; never `sudo` |
 | Install proof before any tag exists | `npm pack`, then `npm install --prefix <temp folder> <tarball>`, then run that copy's `doctor` and the fixture acceptance run |
 
 | Platform | Status in 0.1.0 |
@@ -1036,6 +1036,8 @@ Choices made while building, each the simplest that kept a promise:
 | C14 | `tsc --noEmit` | Runs with `strict` off | JSDoc types cover the public shapes; a strict pass is `[v0.1.1]` |
 | C15 | Window test "for 200 sampled passages" | The sample is taken by chunking the vault again with the shipped chunker and counter, densest first, not by reading the stored index | The embedded text (prefix plus body) is what must fit the window, and only the body is stored |
 | C16 | `rebuild --full` "asks for confirmation unless `--yes`" | The same; when there is no terminal to ask on (an agent's shell, `--json`), it stops with a usage message that names `--yes` | It must never hang waiting for an answer nobody can give |
+| C17 | `doctor` ends with one next action | On a vault that has been synced it leaves out the first-sync estimate, and when `status` would say "In step: yes" it ends "Ready. Your vault is in step." | It used to print "a first sync of this vault should take about 0.0 s" and "Next: vault-mirror sync" on a vault that was already in step |
+| C18 | Durations print one decimal under 10 s | The same, except under a tenth of a second, where two decimals are printed ("0.05 s") | A sync with nothing changed printed "0.0 s" |
 
 ---
 

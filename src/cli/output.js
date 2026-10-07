@@ -8,6 +8,8 @@ export function num(n) { return Math.round(n).toLocaleString('en-US'); }
 
 /** 490 -> "8 min 10 s"; 1.42 -> "1.4 s". @param {number} seconds */
 export function duration(seconds) {
+  // Under a tenth of a second, one decimal would print "0.0 s"; show hundredths instead.
+  if (seconds < 0.095) return `${Math.max(0.01, seconds).toFixed(2)} s`;
   if (seconds < 60) return `${seconds < 10 ? seconds.toFixed(1) : Math.round(seconds)} s`;
   const m = Math.floor(seconds / 60); const s = Math.round(seconds - m * 60);
   if (m < 60) return s ? `${m} min ${s} s` : `${m} min`;

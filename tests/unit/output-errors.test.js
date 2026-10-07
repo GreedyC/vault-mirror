@@ -57,6 +57,9 @@ test('code, exit and wording table', () => {
 test('plain numbers and durations', () => {
   assert.equal(num(18400), '18,400');
   assert.equal(duration(1.42), '1.4 s');
+  assert.equal(duration(0.052), '0.05 s');
+  assert.equal(duration(0.001), '0.01 s');
+  assert.equal(duration(0.097), '0.1 s');
   assert.equal(duration(490), '8 min 10 s');
   assert.equal(duration(62), '1 min 2 s');
   assert.equal(eta(300), 'about 5 min left');

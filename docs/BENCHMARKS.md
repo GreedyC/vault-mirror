@@ -2,7 +2,7 @@
 
 Measured numbers for vault-mirror 0.1.0. Nothing here is a promise for another computer.
 
-**Read this first.** Every number below was taken on one machine while other heavy jobs were running on it (load average between 8 and 16 on 16 cores). So every speed is labelled **busy** and is a rough lower bound. The README quotes only the section "Measured again for the README" below and the scale check, each with its load average beside it. No number here has been taken on an idle machine yet.
+**Read this first.** Every number below was taken on one machine while other heavy jobs were running on it (load average between 8 and 16 on 16 cores). So every speed is labelled **busy** and is a rough lower bound. The README quotes only the sections "Measured again for the README" and "A real vault of about two thousand notes" below, the scale check and the recall check, each with its load average beside it. No number here has been taken on an idle machine yet.
 
 | | |
 | --- | --- |
@@ -23,14 +23,14 @@ Three sets of data were used:
 
 | Operation | Budget | Measured | Data | Machine state |
 | --- | --- | --- | --- | --- |
-| First sync, 4 readers | 30 minutes or less at about 40,000 passages | 60.6 s for 2,199 passages: 36 passages a second. At that rate 40,000 passages would take about 18.5 minutes (a projection, not a measurement) | Practice vault | busy |
+| First sync, 4 readers | 30 minutes or less at about 40,000 passages | 60.6 s for 2,199 passages: 36 passages a second. 17 min 7 s for 51,572 passages with 6 readers (see "A real vault of about two thousand notes") | Practice vault; a real vault | busy |
 | Sync with nothing changed | 2 s or less (0.5 s for about 2,000 notes) | 0.05 s at 176 notes; 0.06 s at 2,000 notes. The model and the engine are not loaded | Practice vault; scale check | busy |
 | Sync after one edited note | 6 s or less (1.5 s wanted) | 0.59 s (one passage re-read) at 640 passages; 0.93 s at 40,000 passages, which includes rewriting the whole sidecar and applying the change to the engine | Fixture; scale check | busy |
 | Search, cold process, nothing changed | 1.5 s or less (0.7 s wanted at about 40,000 passages) | 0.34 s at 2,199 passages; 0.46 s at 40,000; 0.50 s with three wordings in one call | Practice vault; scale check | busy |
 | Engine reload from the sidecar | 5 s or less | 0.6 s for 40,000 rows (the whole `rebuild` command) | Scale check | busy |
 | `status` | 2 s or less (0.3 s wanted) | 0.12 s at 176 notes and 2,199 passages; 0.23 s at 2,000 notes and 40,000 passages. The model is not loaded | Practice vault; scale check | busy |
 | `status --verify` | 60 s or less | 0.31 s at 2,199 passages; 2.8 s at 40,000 | Practice vault; scale check | busy |
-| Peak memory, sync with 4 readers | 2 GB | 1.85 GB | Practice vault | |
+| Peak memory, sync with 4 readers | 2 GB | 1.85 GB, and 1.95 GB in a second person's re-run at load average 8: about 1.9 GB. With 6 readers on the real vault, about 2.7 GB | Practice vault; a real vault | |
 | Peak memory, search | 0.7 GB | 0.79 GB at 40,000 passages. **Over the budget by about 0.1 GB** | Scale check | |
 | Peak memory, `status` and a sync with nothing changed | | 0.25 GB and 0.07 GB at 40,000 passages | Scale check | |
 | Disk | 300 MB or less | 14 MB for 2,199 passages (5 MB sidecar, 8.5 MB engine file); 208 MB for 40,000 passages (129 MB engine file, the rest sidecar) | Practice vault; scale check | |
@@ -148,11 +148,32 @@ The tool's own breakdown of one of those searches (`--no-sync`): model load and 
 
 The README's first-run example and its demo recording use the invented fixture vault cut down to its plain folders (15 notes that belong in the index, 32 passages): the first sync took 2.0 to 2.2 s in each of five runs, and a search with one wording 0.29 s by the tool's own count.
 
+An independent re-run of this section on Oct 7, 2026 (same machine, fresh copy of the practice vault, load average about 8): first sync 60.9 s, search 0.40 s, `status` 0.12 s, peak memory for the first sync 1.95 GB, index folder 14 MB by `du`.
+
+## A real vault of about two thousand notes
+
+One run, Oct 6, 2026, same machine and versions, on commit `cbac564` (before the exact-words list was added). The vault is a real personal vault. It is private and not in this repo, so a reader cannot repeat this run; the commands were the ordinary ones (`init`, `sync`, `status`, `search`). The sync ran at low priority with 6 readers. The load average was about 7 to 9, so every speed here is **busy** and rough.
+
+| What | Measured |
+| --- | --- |
+| Notes | 2,092 `.md` files on disk; 2,082 indexed (the 10 in the templates folder are left out by default) |
+| Passages | 51,572 |
+| First sync, 6 readers, low priority | 17 min 7 s: about 50 passages a second |
+| Peak memory, first sync | about 2.7 GB (the 2 GB budget is for 4 readers) |
+| Index folder on disk | 218 MB |
+| Search, cold process, one wording | 0.48 to 0.49 s: model load and question 0.26 s, opening the index 0.17 s, the search itself 0.016 s |
+| `status` | 0.26 s |
+| Sync with nothing changed | 0.06 s |
+| 1:1 check | Passed: notes on disk that belong = notes in the index; passages recorded = passages in ruvector |
+| Read-only check | A checksum listing of the vault before and after the run was identical |
+
+Not measured in this run: a sync after one edit, three wordings in one call, `rebuild`, peak memory for a search, and anything with the exact-words list. The scale check above covers those with synthetic vectors.
+
 ## Items the spec listed as "not measured by anything yet"
 
 | Item | State after this build |
 | --- | --- |
-| Passage count this chunker gives the reference vault | **Still owed.** This build did not run on it |
+| Passage count this chunker gives the reference vault | 51,572 passages from 2,082 notes (see "A real vault of about two thousand notes") |
 | The flat index with real vectors | Measured at 641 and 2,199 real vectors: every passage id present, and 50 of 50 sampled searches equal an exact scan (`status --verify`). At 40,000 rows only synthetic vectors were used (50 of 50) |
 | End-to-end rate through this tool's own pipeline | 36 to 37 passages a second with 4 readers at low priority (busy) |
 | First-sync time on an ordinary laptop | **Still owed.** One machine only |

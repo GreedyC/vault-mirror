@@ -9,6 +9,7 @@ import { resolveSafe, tildify } from '../../config/paths.js';
 import { configureWriter, ensureDir, remove, writeFile } from '../../store/safe-write.js';
 import { clearIfStale, liveOwner } from '../../store/lock.js';
 import { loadManifest } from '../../store/manifest.js';
+import { computeStatus } from '../../status/checks.js';
 import { lookupVault } from '../../vault/obsidian-registry.js';
 import { walkVault } from '../../vault/walk.js';
 import { createEmbedder } from '../../embed/embedder.js';
@@ -99,6 +100,19 @@ export async function doctorCommand(ui) {
     else add('obsidian', 'warn', 'Obsidian has not opened this vault on this computer, so links to notes will not open yet.', 'Open this folder as a vault in Obsidian once.');
   }
 
+  // Has this vault been synced, and is it in step? Asked the way `status` asks, so "in step" means one thing.
+  let synced = false; let inStep = false;
+  if (vaultReal && homeOk && cfg.vault) {
+    try {
+      const indexDir = indexDirFor(home, vaultReal);
+      if (loadManifest(indexDir)) {
+        synced = true;
+        const ctx = { home, cfg, vault: { real: vaultReal, name: path.basename(vaultReal), opened: true }, indexDir };
+        inStep = (await computeStatus(/** @type {any} */ (ctx), {}, /** @type {any} */ ({ warn() {}, warnings: [] }))).inStep;
+      }
+    } catch (e) { debug(`doctor could not check whether the vault is in step: ${String(/** @type {any} */ (e)?.message).slice(0, 160)}`); }
+  }
+
   // Model and embedding
   const entry = modelEntry(cfg.embedding.model);
   const embedder = createEmbedder({ model: cfg.embedding.model, debug, notice: (line) => ui.info(line) });
@@ -133,7 +147,8 @@ export async function doctorCommand(ui) {
       const { workers } = chooseWorkers(cfg.vault ? cfg.vault.workers : 'auto');
       const rate = single * Math.max(1, workers);
       estimate.passagesPerSecond = Math.round(rate * 10) / 10;
-      if (vaultReal && notes) {
+      // The first-sync estimate is only for a vault that has not been synced yet.
+      if (vaultReal && notes && !synced) {
         // A rough stand-in used only for this estimate: about 55 words to a passage.
         let bytes = 0; for (const n of walkVault(vaultReal, { exclude: cfg.vault?.exclude }).notes) bytes += n.size;
         const passages = Math.max(notes, Math.round(bytes / 6 / 55));
@@ -200,7 +215,7 @@ export async function doctorCommand(ui) {
 
   const failed = checks.filter((c) => c.status === 'fail').length;
   ui.out('');
-  ui.out(failed ? `${failed} ${failed === 1 ? 'check' : 'checks'} failed. Follow the first "Next" above.` : cfg.vault ? 'Ready. Next: vault-mirror sync' : 'Ready. Next: vault-mirror init "<path to your vault>"');
+  ui.out(failed ? `${failed} ${failed === 1 ? 'check' : 'checks'} failed. Follow the first "Next" above.` : !cfg.vault ? 'Ready. Next: vault-mirror init "<path to your vault>"' : inStep ? 'Ready. Your vault is in step.' : 'Ready. Next: vault-mirror sync');
   void os;
   return { vault: vaultReal ? { name: path.basename(vaultReal), path: vaultReal } : null, body: { checks, estimate }, exitCode: failed ? 5 : 0 };
 }

@@ -9,7 +9,6 @@ A change to how notes are cut into passages, or to the reading model, makes ever
 ### Fixed
 
 - `init` on a disk that tells letter case apart (most Linux disks): the templates folder that Obsidian's own setting names is now left out when the setting spells it in another letter case, as every other `exclude` entry already was.
-
 - `sync` on a computer with one reader (under 8 GB of memory, or two cores): Ctrl+C now stops it at the next passage. Before, it was not noticed until the sync had finished.
 - The first-run download: time when the computer was asleep or the process was held up is no longer counted as "no data arriving", so a slow download is not given up on by mistake.
 - Windows: the fast engine is now used. The check that a new index is the exact kind read the index file while the engine had it open, which Windows does not allow, so every command fell back to the built-in exact search and `doctor` reported "A test index could not be created". The file is now created by a short helper process and read before it is opened. Searches on 0.1.0 were still correct; they used the slower built-in search.
@@ -18,6 +17,7 @@ A change to how notes are cut into passages, or to the reading model, makes ever
 ### Changed
 
 - Tests and CI only: the unit tests no longer assume a Mac (typed POSIX paths, Windows short folder names, a signal Windows cannot send, line endings), and the end-to-end acceptance script now also runs on Linux and Windows runners. A `.gitattributes` rule keeps text files LF on every system.
+- Documentation only: a new README first screen with a picture of a real result, a "Set it up" section with steps for a person, steps for an AI and four commands to type by hand, a new demo recording, and a labelled figure of what a search returns. Long reference material moved to `docs/FIRST-RUN.md`, `docs/HOW-IT-WORKS.md` and `docs/COMPARISON.md`. The README now names `~/.ruvector/models/`, where the ruvector library keeps the reading model, in the safety facts and the removal steps. Recall counts are no longer printed in the README; they are in `docs/BENCHMARKS.md`.
 
 ## [0.1.0] - 2026-10-07
 

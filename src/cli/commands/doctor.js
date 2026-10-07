@@ -184,6 +184,7 @@ export async function doctorCommand(ui) {
       add('engine-round-trip', agree ? 'ok' : 'fail', agree ? 'The engine\'s top results equal an exact scan\'s.' : 'The engine\'s results differ from an exact scan.', agree ? null : 'Install vault-mirror again so the tested versions are used.');
     } catch (e) {
       const notFlat = /** @type {any} */ (e)?.code === 'VM_E_ENGINE_NOT_FLAT';
+      debug(`doctor engine check: ${String(/** @type {any} */ (e)?.code || '')} ${String(/** @type {any} */ (e)?.message).slice(0, 160)}`);
       add('engine-is-flat', 'fail', notFlat ? 'A new index did not pass the exact-index check (VM_E_ENGINE_NOT_FLAT). The built-in exact search will be used instead.' : 'A test index could not be created.', 'Install vault-mirror again so the tested versions are used.');
     } finally { try { remove(tmp); } catch { /* removed at next run */ } }
   }

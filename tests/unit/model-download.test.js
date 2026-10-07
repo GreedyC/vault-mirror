@@ -74,6 +74,16 @@ test('a slow download that keeps arriving is never stopped, and says how far it 
   });
 });
 
+test('time when this process was not running (a frozen process, a laptop asleep) is not counted as a stalled download', async () => {
+  // The first piece is due at 300 ms. The process is held from 30 ms for one and a half stall limits, so the
+  // watchdog's next look comes late, with nothing received yet. That silence was ours, not the network's.
+  await firstRun(async () => new Response(slowBody(4, 300)), async (e) => {
+    setTimeout(() => { const end = Date.now() + WATCH.stallMs * 1.5; while (Date.now() < end) { /* hold the process */ } }, 30);
+    await e.init();
+    assert.equal(e.modelPresent, true);
+  });
+});
+
 test('a download where nothing ever arrives says it is still waiting, then stops as offline', async () => {
   await firstRun(() => new Promise(() => {}), async (e, notices) => {
     const started = Date.now();

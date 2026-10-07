@@ -10,6 +10,10 @@ A change to how notes are cut into passages, or to the reading model, makes ever
 
 - `init` on a disk that tells letter case apart (most Linux disks): the templates folder that Obsidian's own setting names is now left out when the setting spells it in another letter case, as every other `exclude` entry already was.
 
+- `sync` on a computer with one reader (under 8 GB of memory, or two cores): Ctrl+C now stops it at the next passage. Before, it was not noticed until the sync had finished.
+- The first-run download: time when the computer was asleep or the process was held up is no longer counted as "no data arriving", so a slow download is not given up on by mistake.
+- `sync --detach` on Windows no longer opens a console window of its own.
+
 ### Changed
 
 - Tests and CI only: the unit tests no longer assume a Mac (typed POSIX paths, Windows short folder names, a signal Windows cannot send, line endings), and the end-to-end acceptance script now also runs on Linux and Windows runners. A `.gitattributes` rule keeps text files LF on every system.

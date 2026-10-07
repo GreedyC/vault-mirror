@@ -407,7 +407,7 @@ vault-mirror stands on other people's work.
   <img alt="Verified on macOS arm64" src="https://img.shields.io/badge/verified%20on-macOS%20arm64-blue">
 </p>
 
-**Contributing.** Ideas and fixes are welcome. Everything comes in as a pull request from your own fork, and a maintainer approves it before it merges.<br>
+**Contributing.** Ideas and fixes are welcome. Everything comes in as a pull request from your own fork. Automated checks run on it, and Mak Allen approves it before it merges.<br>
 How to do that, and the lines no change may cross: [CONTRIBUTING.md](CONTRIBUTING.md).<br>
 Who decides, and how releases work: [GOVERNANCE.md](GOVERNANCE.md).
 

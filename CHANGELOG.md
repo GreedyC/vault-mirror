@@ -23,6 +23,10 @@ The first release.
 - `--json` on every command: one object, a stable shape, plain error codes with one next action each.
 - Leaving notes out: `exclude` folders, `index: false` in a note's properties, and Obsidian's own "Excluded files" setting.
 
+### Fixed before the tag
+
+- The exact-words table kept a note's old word rows when the note was cut again without its content changing. This happens when a second note with the same file name appears or goes: the folder then joins or leaves what the first note's passages are read with, and its cuts can move. Plain `status` still passed; only `status --verify` saw it. The table's per-note key now also carries that flag, so the note's rows are made again. A table written by an earlier build is made again once, by the next search, status or sync. Covered by a unit test and acceptance step X2.
+
 ### Known limits
 
 - Verified on Apple Silicon Macs. Windows, Intel Macs and Linux are not yet verified.

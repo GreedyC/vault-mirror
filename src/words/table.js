@@ -23,9 +23,15 @@ export const TABLE_VERSION = 1;
  * @property {Uint8Array} termTf             how often each of those words appears in its passage
  */
 
-/** Eight bytes that change when the note's path or content changes. @param {string} notePath @param {string} sha256 @param {number} passages */
-export function noteKey(notePath, sha256, passages) {
-  return crypto.createHash('sha256').update(`${notePath}\0${sha256}\0${passages}`).digest().subarray(0, 8);
+/**
+ * Eight bytes that change whenever the note's passages can change: its path, its content, how many
+ * passages it has, and whether its folder is part of the prefix. That last flag flips when a second
+ * note with the same file name appears or goes; the note is then cut again with a different budget,
+ * so its passages can change while its content does not.
+ * @param {string} notePath @param {string} sha256 @param {number} passages @param {boolean} [folderInPrefix]
+ */
+export function noteKey(notePath, sha256, passages, folderInPrefix = false) {
+  return crypto.createHash('sha256').update(`${notePath}\0${sha256}\0${passages}\0${folderInPrefix ? 1 : 0}`).digest().subarray(0, 8);
 }
 
 /**
@@ -58,7 +64,7 @@ export function noteWords(record) {
 /**
  * Make the table for a set of notes. A note whose key is already in `old` is copied from it;
  * every other note is read from the passage store through `readNote`.
- * @param {{ stamp: string, chunker: { version: number, settingsHash: string }, notes: { path: string, sha256: string, passages: number }[], old?: WordsTable | null, readNote: (index: number) => { title?: string, passages: { trail?: string[], text: string }[] } }} o
+ * @param {{ stamp: string, chunker: { version: number, settingsHash: string }, notes: { path: string, sha256: string, passages: number, folderInPrefix?: boolean }[], old?: WordsTable | null, readNote: (index: number) => { title?: string, passages: { trail?: string[], text: string }[] } }} o
  * @returns {{ table: WordsTable, reused: number, read: number }}
  */
 export function buildTable(o) {
@@ -82,7 +88,7 @@ export function buildTable(o) {
   let P = 0; let T = 0; let reused = 0; let read = 0;
   for (let i = 0; i < N; i++) {
     const note = o.notes[i];
-    const key = noteKey(note.path, note.sha256, note.passages);
+    const key = noteKey(note.path, note.sha256, note.passages, Boolean(note.folderInPrefix));
     keys.set(key, i * 8);
     notePassages[i] = note.passages;
     const at = old ? oldAt.get(key.toString('hex')) : undefined;

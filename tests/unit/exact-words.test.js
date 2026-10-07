@@ -6,7 +6,7 @@ import { configureWriter } from '../../src/store/safe-write.js';
 import { createDataDir, openSidecar } from '../../src/store/sidecar.js';
 import { newManifest, saveManifest, switchCurrent } from '../../src/store/manifest.js';
 import { tokenise, isDistinctive, hashToken, readQuestion, hasPhrase, passageFields, STOP_WORDS } from '../../src/words/tokens.js';
-import { buildTable, encodeTable, decodeTable, decodeHead, sameWords, noteWords } from '../../src/words/table.js';
+import { buildTable, encodeTable, decodeTable, decodeHead, sameWords, noteWords, noteKey } from '../../src/words/table.js';
 import { findWords, rankPassages, idf, termScore } from '../../src/words/bm25.js';
 import { wordsFor, wordsAtStamp, checkWords, readWords, dropWords, WORDS_FILE } from '../../src/words/store.js';
 import { exactWordHits, notAlreadyShown } from '../../src/search/exact-words.js';
@@ -127,6 +127,24 @@ test('the table follows the notes: unchanged notes are copied, changed ones are 
   const otherRules = buildTable({ stamp: 's:2', chunker: { version: 2, settingsHash: 'x' }, old: first.table, notes: first.names.map((p) => ({ path: p, sha256: JSON.stringify(NOTES[p]), passages: NOTES[p].passages.length })), readNote: (i) => NOTES[first.names[i]] });
   assert.equal(otherRules.reused, 0, 'a table made with another chunker is not copied from');
   assert.throws(() => buildTable({ stamp: 's', chunker: CHUNKER, notes: [{ path: 'A.md', sha256: 'a', passages: 2 }], readNote: () => rec('A', ['only one']) }), /does not hold the passages/);
+});
+
+test('the table reads a note again when its folder joins or leaves the prefix (same content, same count, other cuts)', () => {
+  // A second note with the same file name appears: the first is cut again with a smaller budget. Its
+  // content hash and its passage count can both stay the same while the passages themselves change.
+  const before = rec('Log', ['kestrel heron wagtail', 'curlew gannet']);
+  const after = rec('Log', ['kestrel heron', 'wagtail curlew gannet']);
+  const note = (/** @type {boolean} */ fip) => [{ path: 'A/Log.md', sha256: 'same-content', passages: 2, folderInPrefix: fip }];
+  const first = buildTable({ stamp: 's:1', chunker: CHUNKER, notes: note(false), readNote: () => before });
+  let reads = 0;
+  const next = buildTable({ stamp: 's:2', chunker: CHUNKER, old: first.table, notes: note(true), readNote: () => { reads++; return after; } });
+  assert.equal(reads, 1, 'the note is read again, not copied'); assert.equal(next.reused, 0);
+  const fresh = buildTable({ stamp: 's:2', chunker: CHUNKER, notes: note(true), readNote: () => after });
+  assert.ok(sameWords(next.table, fresh.table), 'the same table as one made from nothing');
+  assert.ok(!sameWords(next.table, first.table), 'and not the old rows');
+  const still = buildTable({ stamp: 's:3', chunker: CHUNKER, old: next.table, notes: note(true), readNote: () => { throw new Error('must not be read'); } });
+  assert.equal(still.reused, 1, 'an unchanged flag still copies');
+  assert.ok(!Buffer.from(noteKey('A/Log.md', 'h', 2, false)).equals(Buffer.from(noteKey('A/Log.md', 'h', 2, true))), 'the key itself differs');
 });
 
 // --- scoring ---

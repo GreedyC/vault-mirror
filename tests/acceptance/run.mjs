@@ -793,6 +793,51 @@ await step('X1', 'an exact phrase the list by meaning misses is found by the exa
   return `found at rank 1 of the exact-words list (${hit.words.join(', ')}); ${s.json.timings.wordsMs} ms`;
 });
 
+await step('X2', 'a second note with the same file name appears: the first is cut again, and the exact-words table follows', () => {
+  // The folder joins the prefix of a note when another note shares its file name. The note is then cut with a
+  // smaller budget: same content, here the same number of passages, other cuts. The table must not keep the old rows.
+  const BIRDS = ['kestrel', 'heron', 'wagtail', 'curlew', 'gannet', 'plover', 'dunlin', 'osprey', 'redshank', 'turnstone', 'whimbrel', 'godwit'];
+  const lines = [];
+  for (let i = 0; i < 36; i++) lines.push(`- ${BIRDS.slice(i % 12, (i % 12) + 1 + ((i * 7) % 5)).join(' ')} tide ${i % 2 ? 'rising' : 'falling'}`);
+  const A = 'North pier harbour office/Tide log.md';
+  fs.mkdirSync(path.join(VAULT, 'North pier harbour office'), { recursive: true });
+  fs.writeFileSync(path.join(VAULT, A), `# Tide log\n\n## Sightings\n\n${lines.join('\n')}\n`);
+  accept();
+  eq(vm(['sync', '--json']).json.inStep, true, 'in step with one Tide log');
+  const cuts = () => { const idx = readIndex(MAIN); const out = []; for (let n = 0; idx.texts.has(`${A}#${n}`); n++) out.push(idx.texts.get(`${A}#${n}`)); return { flag: idx.manifest.notes[A].folderInPrefix, texts: out }; };
+  const one = cuts();
+  eq(one.flag, false, 'alone, the folder is not in the prefix');
+
+  fs.mkdirSync(path.join(VAULT, 'South pier'), { recursive: true });
+  fs.writeFileSync(path.join(VAULT, 'South pier', 'Tide log.md'), '# Tide log\n\nThe south pier log is kept by the harbour office.\n');
+  accept();
+  const s = vm(['sync', '--json']);
+  eq(s.status, 0, 'exit'); eq(s.json.inStep, true, 'in step with two');
+  const two = cuts();
+  eq(two.flag, true, 'with a namesake, the folder is in the prefix');
+  eq(two.texts.length, one.texts.length, 'the note has as many passages as before (the case a count alone cannot catch)');
+  assert(JSON.stringify(two.texts) !== JSON.stringify(one.texts), 'and they are cut in other places');
+  const check = (/** @type {string} */ when) => {
+    const st = vm(['status', '--json']);
+    eq(st.json.checks.find((/** @type {any} */ c) => c.name === 'exact-words-match').ok, true, `exact-words-match ${when}`);
+    const v = vm(['status', '--verify', '--json']);
+    eq(v.json.checks.find((/** @type {any} */ c) => c.name === 'verify-exact-words').ok, true, `the table equals one made again from the saved passages ${when}`);
+    eq(v.json.inStep, true, `in step ${when}`);
+  };
+  check('after the namesake appears');
+
+  fs.rmSync(path.join(VAULT, 'South pier'), { recursive: true }); accept();
+  eq(vm(['sync', '--json']).json.inStep, true, 'in step after the namesake goes');
+  const back = cuts();
+  eq(back.flag, false, 'the folder leaves the prefix again');
+  eq(JSON.stringify(back.texts), JSON.stringify(one.texts), 'and the first cuts come back');
+  check('after the namesake goes');
+
+  fs.rmSync(path.join(VAULT, 'North pier harbour office'), { recursive: true }); accept();
+  eq(vm(['sync', '--json']).json.inStep, true, 'in step after the tidy-up');
+  return `${one.texts.length} passages cut again in other places, twice; the table followed both times`;
+});
+
 await step(25, 'after the whole run', () => {
   const stray = [];
   const look = (/** @type {string} */ dir, depth = 0) => { for (const e of fs.readdirSync(dir, { withFileTypes: true })) { if (e.name === 'node_modules' || e.name === '.git') continue; const abs = path.join(dir, e.name); if (e.isDirectory() && depth < 8) look(abs, depth + 1); else if (e.name === 'ruvector.db') stray.push(abs); } };

@@ -375,7 +375,7 @@ No. vault-mirror uses ruvector as a library. It needs no ruvector hooks, no ruve
 
 ## What is finished and what comes next
 
-Version 0.1.0. It passes its unit suite and a 33-step acceptance script that includes the read-only checks, a `kill -9` in the middle of a sync, and two syncs racing. It has been run on one machine: verified on Apple Silicon Macs; Windows, Intel Macs and Linux are not yet verified. Windows on ARM and musl Linux have no native ruvector build, so a built-in exact engine takes over there and says so.
+Version 0.1.0. It passes its unit suite and a 34-step acceptance script that includes the read-only checks, a `kill -9` in the middle of a sync, and two syncs racing. It has been run on one machine: verified on Apple Silicon Macs; Windows, Intel Macs and Linux are not yet verified. Windows on ARM and musl Linux have no native ruvector build, so a built-in exact engine takes over there and says so.
 
 Planned, with no dates:
 

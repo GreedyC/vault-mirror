@@ -50,7 +50,7 @@ export function checkWords(indexDir, manifest) {
     for (let i = 0; i < N; i++) {
       const e = manifest.notes[names[i]];
       if (list.readUInt32LE(N * 8 + i * 4) !== e.passages) return { ok: false, ...counts };
-      if (!noteKey(names[i], e.sha256, e.passages).equals(list.subarray(i * 8, i * 8 + 8))) return { ok: false, ...counts };
+      if (!noteKey(names[i], e.sha256, e.passages, Boolean(e.folderInPrefix)).equals(list.subarray(i * 8, i * 8 + 8))) return { ok: false, ...counts };
     }
     return { ok: true, ...counts };
   } catch { return none; }
@@ -94,7 +94,7 @@ export function wordsFor(indexDir, loaded, o = {}) {
   const names = Object.keys(manifest.notes);
   const { table, reused, read } = buildTable({
     stamp: manifest.stamp, chunker: manifest.chunker, old,
-    notes: names.map((p) => ({ path: p, sha256: manifest.notes[p].sha256, passages: manifest.notes[p].passages })),
+    notes: names.map((p) => ({ path: p, sha256: manifest.notes[p].sha256, passages: manifest.notes[p].passages, folderInPrefix: Boolean(manifest.notes[p].folderInPrefix) })),
     readNote: (i) => readRecord(dataDir, manifest.notes[names[i]].log),
   });
   if (o.save) writeFileAtomic(fileOf(indexDir), encodeTable(table));

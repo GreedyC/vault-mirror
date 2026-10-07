@@ -31,4 +31,24 @@ if (db) {
   await attempt('11 len after delete', () => db.len());
 }
 await attempt('12 remove the folder while the engine holds the file', () => { fs.rmSync(dir, { recursive: true, force: true }); return fs.existsSync(dir) ? 'still there' : 'gone'; });
+
+// The tool's own path, exactly as doctor runs it.
+const { createFlat } = await import('../../src/engine/ruvector-flat.js');
+const { flatSelfTest } = await import('../../src/engine/selftest.js');
+const dir2 = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'vm-diag2-')));
+const made = await attempt('13 createFlat (the tool)', async () => { const r = await createFlat(path.join(dir2, 'check.db'), dims); return r.storagePath; });
+if (made) {
+  const { engine } = /** @type {any} */ ({ engine: null });
+  void engine;
+}
+const dir3 = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'vm-diag3-')));
+const f3 = path.join(dir3, 'check.db');
+const r3 = await attempt('14 createFlat then flatSelfTest (the tool)', async () => { const { engine } = await createFlat(f3, dims); await flatSelfTest(engine, dims, f3); return 'self-test passed'; });
+void r3;
+// Variants: only the raw binding; only the wrapper; forward slashes.
+const dir4 = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'vm-diag4-')));
+await attempt('15 wrapper only, new file (no raw binding first)', async () => { const x = new rv.VectorDB({ dimensions: dims, storagePath: path.join(dir4, 'w.db'), distanceMetric: 'cosine' }); const v = new Float32Array(dims); v[0] = 1; await x.insertBatch([{ id: 'a', vector: v }]); return { len: await x.len(), flat: fs.readFileSync(path.join(dir4, 'w.db')).includes('"hnsw_config":null') }; });
+await attempt('16 raw binding only, then use it', async () => { const x = new rv.NativeVectorDb({ dimensions: dims, storagePath: path.join(dir4, 'n.db'), distanceMetric: 'Cosine' }); return { methods: Object.getOwnPropertyNames(Object.getPrototypeOf(x)).join(','), size: fs.statSync(path.join(dir4, 'n.db')).size }; });
+await attempt('17 raw then wrapper, forward slashes', async () => { const p = path.join(dir4, 's.db').split(path.sep).join('/'); new rv.NativeVectorDb({ dimensions: dims, storagePath: p, distanceMetric: 'Cosine' }); const x = new rv.VectorDB({ dimensions: dims, storagePath: p, distanceMetric: 'cosine' }); return await x.len(); });
+await attempt('18 raw, wait 500 ms and collect garbage, then wrapper', async () => { const p = path.join(dir4, 'g.db'); (() => { new rv.NativeVectorDb({ dimensions: dims, storagePath: p, distanceMetric: 'Cosine' }); })(); await new Promise((r) => setTimeout(r, 500)); if (globalThis.gc) globalThis.gc(); const x = new rv.VectorDB({ dimensions: dims, storagePath: p, distanceMetric: 'cosine' }); return await x.len(); });
 process.exit(0);

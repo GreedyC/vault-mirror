@@ -139,6 +139,8 @@ jobs:
       - name: The command answers in bash
         shell: bash
         run: vault-mirror --version
+      - name: TEMPORARY engine diagnosis
+        run: node tests/acceptance/diagnose-engine.mjs
       # No shell is set: PowerShell on Windows, bash elsewhere, as a member would have it.
       - name: The first ten minutes of a member (real output and timings)
         run: node tests/acceptance/member-smoke.mjs --installed --default-home

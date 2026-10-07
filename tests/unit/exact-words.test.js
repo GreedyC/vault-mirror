@@ -11,6 +11,7 @@ import { findWords, rankPassages, idf, termScore } from '../../src/words/bm25.js
 import { wordsFor, wordsAtStamp, checkWords, readWords, dropWords, WORDS_FILE } from '../../src/words/store.js';
 import { exactWordHits, notAlreadyShown } from '../../src/search/exact-words.js';
 import { searchReady } from '../../src/search/search.js';
+import { remakeWords } from '../../src/cli/commands/rebuild.js';
 import { createExact } from '../../src/engine/exact.js';
 import { passageId } from '../../src/engine/engine.js';
 import { tmpDir } from '../helpers/tmp.mjs';
@@ -281,6 +282,25 @@ test('the saved table: made once, used as it is, brought in step after a change,
   assert.equal(wordsFor(s.indexDir, s, { save: true }).how, 'built', 'a damaged table is made again');
   dropWords(s.indexDir);
   assert.ok(!fs.existsSync(file));
+});
+
+test('rebuild: a saved passage that cannot be read never throws; the table is removed and the caller is told', async () => {
+  const s = indexOf(NOTES);
+  const file = path.join(s.indexDir, WORDS_FILE);
+  assert.equal(await remakeWords(s.indexDir, s), true);
+  assert.equal(checkWords(s.indexDir, s.manifest).ok, true, 'made again from the saved passages');
+
+  // One record no longer parses (same length, so every other record is still where the manifest says).
+  const at = s.manifest.notes[Object.keys(s.manifest.notes)[0]].log;
+  const fd = fs.openSync(path.join(s.dataDir, 'passages.jsonl'), 'r+'); fs.writeSync(fd, 'X', at[0]); fs.closeSync(fd);
+  assert.throws(() => wordsFor(s.indexDir, s, { fresh: true }), 'the store itself still refuses the record');
+  assert.equal(await remakeWords(s.indexDir, s), false, 'rebuild is told, and does not throw');
+  assert.ok(!fs.existsSync(file), 'a table that could not be made again does not stay behind as if it had been');
+  assert.equal(checkWords(s.indexDir, s.manifest).ok, false, 'so status shows it');
+
+  // The data folder is gone altogether (and no newer one took its place): the same answer, not an exception.
+  fs.rmSync(s.dataDir, { recursive: true });
+  assert.equal(await remakeWords(s.indexDir, s), false);
 });
 
 test('the search path takes a ready embedder and a ready index, and returns both lists', async () => {

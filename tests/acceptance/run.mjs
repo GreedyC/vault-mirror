@@ -549,7 +549,18 @@ await step(20, 'rebuild --full versus the incremental history', () => {
   eq(quick.status, 0, 'rebuild exit'); eq(quick.json.mode, 'engine', 'mode'); eq(quick.json.inStep, true, 'in step after rebuild'); eq(quick.json.next, null, 'no next action');
   assert(/^Rebuilt the index from saved passages in .* \([\d,]+ passages\)\. Nothing was re-read\.\nIn step: yes\.$/m.test(vm(['rebuild']).stdout), 'human wording');
   timings.rebuildMs = quick.ms;
-  return `${incremental.size} ids and texts identical; rebuild from saved passages ${quick.ms} ms`;
+  // One saved passage record that no longer parses: `rebuild` still exits 0 and names the one way out.
+  const d = home('damaged');
+  try { execFileSync('cp', ['-cR', h, d]); } catch { fs.cpSync(h, d, { recursive: true }); }
+  const di = readIndex(d); const logFile = path.join(di.dataDir, 'passages.jsonl');
+  const at = /** @type {[number, number]} */ (Object.values(di.manifest.notes)[0].log);
+  const fd = fs.openSync(logFile, 'r+'); fs.writeSync(fd, 'X', at[0]); fs.closeSync(fd); // same length, no longer JSON
+  const hurt = vm(['rebuild', '--json'], { home: d });
+  eq(hurt.status, 0, 'rebuild exit with a damaged saved passage'); eq(hurt.json.inStep, false, 'not in step'); eq(hurt.json.next, 'vault-mirror rebuild --full', 'the one next action');
+  assert(/^Next: vault-mirror rebuild$/m.test(vm(['status'], { home: d }).stdout), 'status points at rebuild');
+  const mended = vm(['rebuild', '--full', '--yes', '--json'], { home: d });
+  eq(mended.status, 0, 'rebuild --full exit'); eq(mended.json.inStep, true, 'in step after rebuild --full');
+  return `${incremental.size} ids and texts identical; rebuild from saved passages ${quick.ms} ms; a damaged saved passage ends in rebuild --full`;
 });
 
 await step(21, 'search quality on the question list', () => {

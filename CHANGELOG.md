@@ -12,6 +12,7 @@ A change to how notes are cut into passages, or to the reading model, makes ever
 
 - `sync` on a computer with one reader (under 8 GB of memory, or two cores): Ctrl+C now stops it at the next passage. Before, it was not noticed until the sync had finished.
 - The first-run download: time when the computer was asleep or the process was held up is no longer counted as "no data arriving", so a slow download is not given up on by mistake.
+- Windows: the fast engine is now used. The check that a new index is the exact kind read the index file while the engine had it open, which Windows does not allow, so every command fell back to the built-in exact search and `doctor` reported "A test index could not be created". The file is now created by a short helper process and read before it is opened. Searches on 0.1.0 were still correct; they used the slower built-in search.
 - `sync --detach` on Windows no longer opens a console window of its own.
 
 ### Changed

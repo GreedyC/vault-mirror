@@ -168,8 +168,8 @@ export async function doctorCommand(ui) {
     const tmp = path.join(home, `doctor-${process.pid}`);
     try {
       ensureDir(tmp);
-      const { engine } = await createFlat(path.join(tmp, 'check.db'), dims);
-      await flatSelfTest(engine, dims, path.join(tmp, 'check.db'));
+      const { engine, flat } = await createFlat(path.join(tmp, 'check.db'), dims);
+      await flatSelfTest(engine, dims, flat === undefined ? path.join(tmp, 'check.db') : () => flat);
       add('engine-is-flat', 'ok', 'A new index is created exact (flat): a replaced passage is found once, and a deleted one is gone.');
       const rows = Array.from({ length: 200 }, (_, i) => ({ id: `p${i}`, vector: fakeVector(dims, i + 1) }));
       const outlier = new Float32Array(dims); outlier[3] = -1; rows[77] = { id: 'p77', vector: outlier };

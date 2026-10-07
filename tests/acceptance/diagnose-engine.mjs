@@ -51,4 +51,21 @@ await attempt('15 wrapper only, new file (no raw binding first)', async () => { 
 await attempt('16 raw binding only, then use it', async () => { const x = new rv.NativeVectorDb({ dimensions: dims, storagePath: path.join(dir4, 'n.db'), distanceMetric: 'Cosine' }); return { methods: Object.getOwnPropertyNames(Object.getPrototypeOf(x)).join(','), size: fs.statSync(path.join(dir4, 'n.db')).size }; });
 await attempt('17 raw then wrapper, forward slashes', async () => { const p = path.join(dir4, 's.db').split(path.sep).join('/'); new rv.NativeVectorDb({ dimensions: dims, storagePath: p, distanceMetric: 'Cosine' }); const x = new rv.VectorDB({ dimensions: dims, storagePath: p, distanceMetric: 'cosine' }); return await x.len(); });
 await attempt('18 raw, wait 500 ms and collect garbage, then wrapper', async () => { const p = path.join(dir4, 'g.db'); (() => { new rv.NativeVectorDb({ dimensions: dims, storagePath: p, distanceMetric: 'Cosine' }); })(); await new Promise((r) => setTimeout(r, 500)); if (globalThis.gc) globalThis.gc(); const x = new rv.VectorDB({ dimensions: dims, storagePath: p, distanceMetric: 'cosine' }); return await x.len(); });
+const dir5 = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'vm-diag5-')));
+await attempt('19 createFlat through the helper process, then flatSelfTest, then 300 rows', async () => {
+  const f = path.join(dir5, 'h.db');
+  const made = await createFlat(f, dims, { inHelper: true });
+  await flatSelfTest(made.engine, dims, made.flat === undefined ? f : () => /** @type {boolean} */ (made.flat));
+  const rows = Array.from({ length: 300 }, (_, i) => { const v = new Float32Array(dims); v[i % dims] = 1; v[(i * 7 + 1) % dims] = 0.5; return { id: `p${i}`, vector: v }; });
+  await made.engine.insert(rows);
+  await made.engine.remove(['p3', 'p4']);
+  const top = await made.engine.search(rows[9].vector, 1);
+  return { flat: made.flat, count: await made.engine.count(), top: top[0].id };
+});
+await attempt('20 createFlat with the platform default, then flatSelfTest', async () => {
+  const f = path.join(dir5, 'd.db');
+  const made = await createFlat(f, dims);
+  await flatSelfTest(made.engine, dims, made.flat === undefined ? f : () => /** @type {boolean} */ (made.flat));
+  return { flat: made.flat, helper: made.flat !== undefined };
+});
 process.exit(0);

@@ -8,6 +8,7 @@ A change to how notes are cut into passages, or to the reading model, makes ever
 
 ### Changed
 
+- The rule that `init` writes has one more sentence: use `vault-mirror search` before the Obsidian command-line tool or plain file search, and turn to those only when it returns nothing useful. Run `vault-mirror init "<folder>"` again to get it. `init` replaces the earlier rule where it stands, also when it was pasted without its two markers, touches no other line, and keeps the file's line endings (a file with Windows line endings used to get a block with mixed ones).
 - Documentation only: a new README first screen with a picture of a real result, a "Set it up" section with steps for a person, steps for an AI and four commands to type by hand, a new demo recording, and a labelled figure of what a search returns. Long reference material moved to `docs/FIRST-RUN.md`, `docs/HOW-IT-WORKS.md` and `docs/COMPARISON.md`. The README now names `~/.ruvector/models/`, where the ruvector library keeps the reading model, in the safety facts and the removal steps. Recall counts are no longer printed in the README; they are in `docs/BENCHMARKS.md`.
 
 ## [0.1.0] - 2026-10-07

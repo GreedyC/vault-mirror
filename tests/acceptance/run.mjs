@@ -192,6 +192,7 @@ await step(2, 'search before any sync', () => {
   if (!READ_ONLY) assert(init.json.ruleFiles.every((/** @type {any} */ f) => f.action === 'created'), 'rule files created');
   const r = vm(['search', 'anything', '--json']);
   eq(r.status, 2, 'exit'); eq(r.json.error.code, 'VM_E_NOT_SYNCED', 'code');
+  eq(r.json.vault && r.json.vault.path, VAULT, 'a --json error names the vault once one is set');
   return `init found ${eligible} notes`;
 });
 
@@ -251,6 +252,26 @@ await step(6, 'edit one note; sync', () => {
   eq(grep(MAIN, 'stock turns cloudy').join(','), '', 'the removed sentence appears nowhere in the index folder');
   timings.oneEditSyncMs = r.ms;
   return `1 updated, ${r.json.passages.embedded} passages embedded, ${r.ms} ms`;
+});
+
+await step('Q1', 'edit one note; search with no sync in between', () => {
+  // The search's own quick sync does the work, in the same process that then searches. That process
+  // holds the engine file open, so it must not probe the file again (the probe child cannot open it).
+  const SENTENCE = 'The starter jar lives on the shelf above the heliotrope accordion.';
+  edit('Kitchen/Sourdough.md', (t) => `${t}\n${SENTENCE}\n`); accept();
+  const s = vm(['search', 'where is the starter jar kept, near the accordion', '--json']);
+  eq(s.status, 0, 'exit');
+  eq(s.json.inStep, true, 'the quick sync brought the index in step');
+  eq(top(s.json).vaultPath, 'Kitchen/Sourdough.md', 'rank 1 for the sentence just added');
+  assert(top(s.json).text.includes('heliotrope accordion'), 'the new text is what came back');
+  assert(!s.json.warnings.some((/** @type {string} */ w) => /damaged|reloaded/.test(w)), `no false notice: ${JSON.stringify(s.json.warnings)}`);
+  eq(s.json.timings.probeMs, 0, 'no probe of a file this process already holds open');
+  assert(s.json.timings.engineMs < 2000, `the engine was ready in ${s.json.timings.engineMs} ms`);
+  const next = vm(['search', 'where is the starter jar kept, near the accordion', '--json', '--no-sync']);
+  eq(top(next.json).vaultPath, 'Kitchen/Sourdough.md', 'the next process finds it too');
+  assert(!next.json.warnings.some((/** @type {string} */ w) => /damaged|reloaded/.test(w)), `the engine file was left in step: ${JSON.stringify(next.json.warnings)}`);
+  timings.editThenSearchMs = s.ms;
+  return `${s.ms} ms, engine ${s.json.timings.engineMs} ms`;
 });
 
 await step(7, 'delete one note; sync', () => {
@@ -459,6 +480,7 @@ await step(17, 'sync --detach, status polling, a search while it runs', async ()
   assert(searched.json.searched.passages <= readIndex(h).manifest.totals.passages, 'partial');
   eq(vm(['status', '--json'], { home: h }).json.inStep, true, 'in step at the end');
   assert(fs.existsSync(path.join(readIndex(h).dir, 'logs', 'last-sync.out')), 'output went to logs/last-sync.out');
+  if (!READ_ONLY) eq(fs.readFileSync(path.join(readIndex(h).dir, 'logs', 'last-sync.out'), 'utf8').split('looks like a password or key').length - 1, 1, 'the flagged-note line is in the detached log once');
   eq(leftoverProcesses().join(' | '), '', 'no process left');
   return `returned in ${d.ms} ms; progress seen up to ${sawPercent}%; search during the run covered ${searched.json.searched.passages} passages`;
 });

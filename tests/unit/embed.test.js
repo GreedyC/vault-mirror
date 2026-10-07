@@ -4,8 +4,21 @@ import { createEmbedder, withEmbedder, vectorProblem } from '../../src/embed/emb
 import { createPool } from '../../src/embed/pool.js';
 import { hold, release, writeOut, isHeld } from '../../src/embed/quiet.js';
 import { VmError } from '../../src/errors.js';
+import fs from 'node:fs';
+import { modelFiles } from '../../src/embed/model.js';
+import { modelEntry, DEFAULT_MODEL } from '../../src/embed/models.js';
+import { tmpDir, tinyTokenizer } from '../helpers/tmp.mjs';
 
-const DIMS = createEmbedder({ model: 'all-MiniLM-L6-v2', lib: {} }).dimensions;
+// No model, no engine. Before first use the embedder checks the model's two files on disk, even
+// when the library is a fake, so these tests give it a stand-in model folder of their own.
+// Without it they would pass only on a computer that already has the real model in its home folder.
+process.env.RUVECTOR_CACHE_DIR = tmpDir('model');
+const standIn = modelFiles(modelEntry(DEFAULT_MODEL));
+fs.mkdirSync(standIn.dir, { recursive: true });
+fs.writeFileSync(standIn.model, Buffer.alloc(1024 * 1024)); // the smallest size the embedder accepts as a finished download
+fs.writeFileSync(standIn.tokenizer, JSON.stringify(tinyTokenizer()));
+
+const DIMS = createEmbedder({ model: DEFAULT_MODEL, lib: {} }).dimensions;
 const good = (seed = 1) => Array.from({ length: DIMS }, (_, i) => Math.sin(seed + i));
 
 /** A fake embedding library that records what was called. */

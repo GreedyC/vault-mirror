@@ -83,6 +83,8 @@ export async function runSearch(ctx, opts, ui) {
   // A quick sync first, only when the waiting work is small.
   /** @type {string | null} */
   let syncNotice = null; let inStep = false;
+  /** @type {import('../engine/engine.js').Engine | null} */
+  let syncEngine = null;
   const running = liveOwner(path.join(ctx.indexDir, 'sync.lock'));
   if (running) {
     const p = readProgress(ctx.indexDir);
@@ -92,7 +94,7 @@ export async function runSearch(ctx, opts, ui) {
     try {
       const r = /** @type {any} */ (await runSync(ctx, { quickMaxPassages: v.searchAutoSyncMaxPassages }, quiet));
       if (r.deferred) syncNotice = r.waiting ? `${plural(r.waiting, 'note')} ${r.waiting === 1 ? 'is' : 'are'} waiting to sync. This search covers what is indexed so far. Next: vault-mirror sync --detach` : 'The index needs a sync. This search covers what is indexed so far. Next: vault-mirror sync --detach';
-      else { inStep = r.nothing ? true : Boolean(r.inStep); loaded = loadManifest(ctx.indexDir) || loaded; }
+      else { inStep = r.nothing ? true : Boolean(r.inStep); loaded = loadManifest(ctx.indexDir) || loaded; syncEngine = r.engine || null; }
     } catch (e) {
       if (e instanceof VmError && (e.code === 'VM_E_BUSY' || e.code === 'VM_E_LOCK_LOST')) syncNotice = 'A sync is running. This search covers what is saved so far.';
       else if (e instanceof VmError && e.exitCode === 4) syncNotice = `${e.message} This search covers what is indexed so far.`;
@@ -105,7 +107,11 @@ export async function runSearch(ctx, opts, ui) {
 
   // The engine probe runs in a child process while this process loads the model and reads the question.
   let t = performance.now();
-  const enginePromise = ensureEngine({ indexDir: ctx.indexDir, loaded: { manifest, dataDir }, dimensions });
+  // A quick sync that did real work already opened the engine in this process. The file's lock is held until
+  // exit, so a probe child could not open it: use that handle.
+  const enginePromise = syncEngine
+    ? Promise.resolve(/** @type {import('../engine/build.js').EngineResult} */ ({ engine: syncEngine, how: 'used', seconds: 0, notices: [], warnings: [], probeMs: 0 }))
+    : ensureEngine({ indexDir: ctx.indexDir, loaded: { manifest, dataDir }, dimensions });
   enginePromise.catch(() => {}); // handled below
   const embedder = createEmbedder({ model: String(manifest.embedding.model), debug, notice: (line) => ui.info(line) });
   /** @type {Float32Array[]} */

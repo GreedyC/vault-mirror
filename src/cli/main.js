@@ -63,7 +63,11 @@ export async function main(argv) {
     /** @type {any} */
     let parsed;
     try { parsed = parseArgs({ args: argv, options: { ...COMMON, ...OPTIONS[command] }, allowPositionals: true, strict: true }); }
-    catch (e) { throw new VmError('VM_E_USAGE', { detail: String(/** @type {any} */ (e).message).split('\n')[0].replace(/\.?$/, '.') }); }
+    catch (e) {
+      const unknown = /** @type {any} */ (e).code === 'ERR_PARSE_ARGS_UNKNOWN_OPTION' && /^Unknown option '([^']+)'/.exec(String(/** @type {any} */ (e).message));
+      if (unknown) throw new VmError('VM_E_USAGE', { detail: `${command} has no option ${unknown[1]}.` }); // not Node's own sentence about positional arguments
+      throw new VmError('VM_E_USAGE', { detail: String(/** @type {any} */ (e).message).split('\n')[0].replace(/\.?$/, '.') });
+    }
     const f = parsed.values; const rest = parsed.positionals.slice(1);
     if (f.version) { process.stdout.write(TOOL_VERSION + '\n'); return finish(0); }
     ui = createUi({ json: f.json, quiet: f.quiet });
@@ -92,6 +96,10 @@ export async function main(argv) {
     const err = toVmError(e);
     if (err.code === 'VM_E_INTERNAL') debug(`internal error in ${command}: ${String(/** @type {any} */ (e)?.stack || e).replace(/\n/g, ' | ').slice(0, 2000)}`);
     if (process.env.VAULT_MIRROR_DEBUG && err.code === 'VM_E_INTERNAL') process.stderr.write(String(/** @type {any} */ (e)?.stack || e) + '\n');
+    if (ui.json && !vault && command !== 'init') {
+      // The command failed before it could name its vault. An error still says which vault it was about.
+      try { const c = (await import('./context.js')).loadContext({ needVault: false }); if (c.vault) vault = { name: c.vault.name, path: c.vault.real }; } catch { /* no usable vault: null is the truth */ }
+    }
     printError(err, { json: ui.json, command, vault, warnings: ui.warnings });
     exitCode = err.exitCode;
   }

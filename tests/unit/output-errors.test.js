@@ -6,6 +6,11 @@ import { ERRORS, VmError, toVmError } from '../../src/errors.js';
 import { num, duration, eta, plural } from '../../src/cli/output.js';
 import { skippedSentence } from '../../src/sync/run.js';
 import { tmpDir } from '../helpers/tmp.mjs';
+import fs from 'node:fs';
+import path from 'node:path';
+import { createUi } from '../../src/cli/output.js';
+import { runSync } from '../../src/sync/run.js';
+import { configureWriter } from '../../src/store/safe-write.js';
 
 const BIN = fileURLToPath(new URL('../../bin/vault-mirror.js', import.meta.url));
 const run = (/** @type {string[]} */ args, env = {}) => spawnSync(process.execPath, [BIN, ...args], { encoding: 'utf8', env: { ...process.env, VAULT_MIRROR_HOME: tmpDir('out'), ...env } });
@@ -77,6 +82,9 @@ test('human errors: one sentence, one next action, no stack trace', () => {
   const bad = run(['sync', '--no-such-flag']);
   assert.equal(bad.status, 2);
   assert.ok(!/at .*\.js:\d+/.test(bad.stderr), 'no stack trace on screen');
+  assert.equal(bad.stderr, 'sync has no option --no-such-flag.\nNext: Run `vault-mirror --help`.\n', 'our own sentence, not the argument parser\'s');
+  assert.equal(JSON.parse(run(['sync', '--bogus', '--json']).stdout).error.message, 'sync has no option --bogus.');
+  assert.match(run(['sync', '--workers']).stderr, /^Option '--workers <value>' argument missing\.\nNext: /, 'other parser sentences are already plain');
   assert.equal(run(['frobnicate']).status, 2);
   assert.equal(run(['sync', '/some/path']).status, 2, 'sync takes no path');
 });
@@ -88,4 +96,33 @@ test('--help lists exactly the six commands and makes no saving claim', () => {
   assert.deepEqual(commands, ['init', 'sync', 'search', 'status', 'rebuild', 'doctor']);
   assert.ok(!/times less|x fewer|instant|hybrid/i.test(r.stdout));
   assert.equal(run(['--version']).stdout, '0.1.0\n');
+});
+
+test('a --json error names the vault once one is set', () => {
+  const home = tmpDir('out'); const vault = path.join(tmpDir('out'), 'notes');
+  fs.mkdirSync(path.join(vault, '.obsidian'), { recursive: true });
+  fs.writeFileSync(path.join(vault, 'A.md'), '# A\n\nOne plain sentence about a garden.\n');
+  const env = { VAULT_MIRROR_HOME: home };
+  const failedInit = JSON.parse(run(['init', path.join(vault, 'missing'), '--no-rule', '--json'], env).stdout);
+  assert.deepEqual([failedInit.error.code, failedInit.vault], ['VM_E_VAULT_MISSING', null], 'no vault is set yet');
+  assert.equal(run(['init', vault, '--no-rule', '--json'], env).status, 0);
+  const r = run(['search', 'anything', '--json'], env);
+  const body = JSON.parse(r.stdout);
+  assert.equal(body.error.code, 'VM_E_NOT_SYNCED');
+  assert.deepEqual(body.vault, { name: 'notes', path: vault });
+  assert.deepEqual(JSON.parse(run(['sync', '--bogus', '--json'], env).stdout).vault, { name: 'notes', path: vault }, 'also for a usage error');
+});
+
+test('the busy error says how far the other sync is, also in --json', async () => {
+  const home = tmpDir('busy'); const vault = path.join(home, 'vault'); const indexDir = path.join(home, 'indexes', 'v-00000000');
+  fs.mkdirSync(vault); fs.mkdirSync(indexDir, { recursive: true });
+  configureWriter({ home });
+  // Another sync, alive (this process stands in for it), 41% through.
+  fs.writeFileSync(path.join(indexDir, 'sync.lock'), JSON.stringify({ pid: process.pid, token: 'someone-else', command: 'sync', startedAt: Date.now() }));
+  fs.writeFileSync(path.join(indexDir, 'progress.json'), JSON.stringify({ pid: process.pid, passagesDone: 41, passagesTotal: 100, etaSeconds: 30 }));
+  const ctx = /** @type {any} */ ({ home, cfg: { vault: {}, embedding: { model: 'all-MiniLM-L6-v2' } }, vault: { real: vault, name: 'vault', opened: false }, indexDir });
+  const busy = (/** @type {any} */ e) => e instanceof VmError && e.code === 'VM_E_BUSY' && e.message === 'Another sync is still running (41% done). Nothing is wrong.';
+  await assert.rejects(runSync(ctx, { waitSeconds: 0 }, createUi({ json: true })), busy);
+  fs.rmSync(path.join(indexDir, 'progress.json'));
+  await assert.rejects(runSync(ctx, { waitSeconds: 0 }, createUi({ json: true })), (/** @type {any} */ e) => e.message === 'Another sync is still running. Nothing is wrong.', 'no percent when none is known');
 });

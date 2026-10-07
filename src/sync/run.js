@@ -104,6 +104,10 @@ export async function runSync(ctx, opts, ui) {
       const p = readProgress(ctx.indexDir);
       ui.info(p ? `Another sync is running (${p.percent}% done${p.etaSeconds != null ? `, ${eta(p.etaSeconds)}` : ''}). Waiting for it to finish.` : 'Another sync is running. Waiting for it to finish.');
     },
+  }).catch((e) => {
+    // Say how far the other sync is, in the human line and in --json alike.
+    if (e instanceof VmError && e.code === 'VM_E_BUSY') throw new VmError('VM_E_BUSY', { percent: readProgress(ctx.indexDir)?.percent });
+    throw e;
   });
   const embedder = createEmbedder({ model: ctx.cfg.embedding.model, debug, notice: (line) => ui.info(line) });
   /** @type {ReturnType<typeof openSidecar> | null} */
@@ -295,6 +299,8 @@ export async function runSync(ctx, opts, ui) {
 
       // Bring the engine in step. If the index is busy the sync still ends well: everything is saved.
       let engineNote = null;
+      /** @type {import('../engine/engine.js').Engine | null} */
+      let engine = null; // this process now holds the engine file open; a caller that searches next must use this handle
       const eng = engineStamp(ctx.indexDir);
       if (manifest.totals.passages > 0 && (!eng || eng.stamp !== manifest.stamp)) {
         await embedder.shutdown(); // the readers are done; free their memory before the engine loads
@@ -305,6 +311,7 @@ export async function runSync(ctx, opts, ui) {
           const r = await ensureEngine({ indexDir: ctx.indexDir, loaded: { manifest, dataDir }, dimensions: embedder.dimensions, quiet: true, delta });
           for (const n of r.notices) ui.warn(n);
           for (const w of r.warnings) ui.warnings.push(w);
+          engine = r.engine;
         } catch (e) {
           if (!(e instanceof VmError) || e.code !== 'VM_E_INDEX_BUSY') throw e;
           engineNote = 'Everything is saved. The index is in use right now, so the next search or status will load it.';
@@ -318,7 +325,7 @@ export async function runSync(ctx, opts, ui) {
         inStep, complete: true, counts, leftOutByReason: plan.leftOut,
         passages: { total: total.passages, embedded }, seconds: seconds(),
         resources: { workers: usePool ? workers : 0, lowPriority, peakRssMB: Math.round(usage.maxRSS / 1024), cpuSeconds: Math.round((usage.userCPUTime + usage.systemCPUTime) / 1e5) / 10 },
-        skippedNotes, flaggedNotes, nothing: work === 0, notesInIndex: total.notes, eligible: plan.eligible, engineNote,
+        skippedNotes, flaggedNotes, nothing: work === 0, notesInIndex: total.notes, eligible: plan.eligible, engineNote, engine,
       };
       if (work > 0 || !quick) {
         runLine('sync', { seen: counts.seen, added: counts.added, updated: counts.updated, renamed: counts.renamed, removed: counts.removed, unchanged: counts.unchanged, left_out: counts.leftOut, skipped: counts.skipped, passages: total.passages, embedded, seconds: result.seconds, result: inStep ? 'in-step' : 'not-yet', v: TOOL_VERSION });

@@ -5,6 +5,11 @@ name: CI
 #              but are not verified yet, so a failure there is shown and does not fail the workflow.
 # acceptance:  the end-to-end script on macOS: the read-only checks, a kill -9 in the middle of a
 #              sync, two syncs racing. It downloads the reading model once and caches it.
+# mcp:         the MCP server end to end, on macOS, Linux and Windows: the real `vault-mirror mcp` over
+#              stdio, driven by the official SDK's client, on the invented fixture vault. It lists the
+#              tools, runs every one, and compares a checksum listing of the vault before and after,
+#              with a spy that throws on any write under the vault. It downloads the reading model once
+#              and caches it. A failure on any of the three fails the workflow.
 
 on:
   push:
@@ -76,3 +81,36 @@ jobs:
         run: node bin/vault-mirror.js doctor
       - name: Acceptance (end to end on the invented fixture vault)
         run: node tests/acceptance/run.mjs --vault tests/fixtures/vault
+
+  mcp:
+    name: MCP server, ${{ matrix.label }}, Node ${{ matrix.node }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: macos-latest, label: macOS, node: 22 }
+          - { os: ubuntu-latest, label: Linux, node: 22 }
+          - { os: windows-latest, label: Windows, node: 22 }
+          # The oldest Node the package allows.
+          - { os: ubuntu-latest, label: Linux, node: 20 }
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+          cache-dependency-path: npm-shrinkwrap.json
+      - name: Cache the reading model
+        uses: actions/cache@v4
+        with:
+          path: ~/.ruvector/models
+          key: reading-model-${{ runner.os }}-${{ hashFiles('src/embed/models.js') }}
+      - run: npm ci
+      # The glob is left to bash, so the same line works on every Node version in the matrix.
+      - name: MCP server, end to end (lists the tools, runs each one, checksums the vault before and after)
+        run: node --test tests/mcp/*.test.js

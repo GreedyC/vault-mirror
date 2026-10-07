@@ -6,6 +6,15 @@ A change to how notes are cut into passages, or to the reading model, makes ever
 
 ## [Unreleased]
 
+### Added
+
+- An MCP server: `vault-mirror mcp`, over stdio, on the official MCP SDK. Add it to an app once and its AI can search your vault with a named tool from any project, with no rule line per project and no shell command to approve. Three tools: `search_vault` (structured results: note, heading, file, line, score and `obsidian://` link for each passage, plus the exact-words list), `vault_status` (is the index in step with the vault) and `sync_index` (brings the index up to date; it writes only to vault-mirror's own index folder). **The server has no tool that writes to a vault**, and a call that tries to pass a path is refused. A unit test lists the tools and checks that; an end-to-end test checksums the fixture vault before and after every tool has run, under the same write spy the commands are tested with.
+- The server keeps the reading model loaded between searches, in a helper process that starts with the first search and stops after five minutes without one (`--idle-minutes` changes that). A repeat search skips loading the model. The helper takes about 0.6 GB while it is alive. The server itself never opens the index file and holds no lock, so `sync` and `search` in a terminal are never kept waiting by it.
+- `vault-mirror mcp --setup` prints the lines that add the server to Claude Code, Codex and Claude Desktop, with full paths. It changes no file.
+- `vault-mirror mcp --home <folder>` and `--vault <folder>`: which settings a server reads, and a pin that makes a server refuse to answer from any other vault. Two vaults in one app are two entries, each with its own home folder.
+- `docs/MCP.md`: what the server is, setup for each app, the tools, what it can and cannot do, and troubleshooting.
+- A second runtime dependency, pinned exactly: `@modelcontextprotocol/server` 2.3.1. Only `vault-mirror mcp` loads it.
+
 ### Changed
 
 - Documentation only: a new README first screen with a picture of a real result, a "Set it up" section with steps for a person, steps for an AI and four commands to type by hand, a new demo recording, and a labelled figure of what a search returns. Long reference material moved to `docs/FIRST-RUN.md`, `docs/HOW-IT-WORKS.md` and `docs/COMPARISON.md`. The README now names `~/.ruvector/models/`, where the ruvector library keeps the reading model, in the safety facts and the removal steps. Recall counts are no longer printed in the README; they are in `docs/BENCHMARKS.md`.

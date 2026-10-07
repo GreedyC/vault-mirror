@@ -14,7 +14,7 @@ import crypto from 'node:crypto';
 import { spawn, spawnSync, execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
-import { makeFiller, makeReadmes, makeOddNames, ODD_BODIES } from '../helpers/make-notes.mjs';
+import { makeFiller, makeReadmes, makeOddNames, ODD_NAMES, ODD_BODIES } from '../helpers/make-notes.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const REPO = path.resolve(HERE, '..', '..');
@@ -36,12 +36,14 @@ const CWD = path.join(base, 'cwd'); const PROJECT = path.join(base, 'project'); 
 fs.mkdirSync(CWD); fs.mkdirSync(PROJECT);
 const sourceVault = fs.realpathSync.native(path.resolve(opt.vault));
 let VAULT = sourceVault;
+/** The odd-named notes this system could hold (Windows refuses names with ? " | and :). @type {string[]} */
+let oddWritten = [];
 if (!READ_ONLY) {
   VAULT = path.join(base, 'vault');
   try { execFileSync('cp', ['-cR', sourceVault, VAULT]); } catch { fs.cpSync(sourceVault, VAULT, { recursive: true }); }
   makeFiller(VAULT, Number(opt.filler));
   makeReadmes(VAULT);
-  makeOddNames(VAULT);
+  oddWritten = makeOddNames(VAULT);
   fs.writeFileSync(OBS_JSON, JSON.stringify({ vaults: { a1b2c3d4e5f60718: { path: VAULT, ts: 1, open: true } } }));
 }
 const home = (/** @type {string} */ name) => path.join(base, `home-${name}`);
@@ -744,17 +746,24 @@ await step('S1', 'the screen reports, masks and never drops a passage', () => {
 
 await step('S2', 'odd file names: ids, paths and links round-trip', () => {
   const idx = readIndex(MAIN); const keys = Object.keys(idx.manifest.notes).filter((k) => k.startsWith('Odd/'));
-  assert(keys.length >= 4, `odd-named notes indexed: ${keys.length}`);
+  eq(keys.length, oddWritten.length, `odd-named notes indexed, of the ${oddWritten.length} this system could hold`);
+  assert(keys.length >= (WIN ? 2 : 4), `odd-named notes indexed: ${keys.length}`);
   for (const key of keys) assert(fs.existsSync(path.join(VAULT, ...key.normalize('NFC').split('/'))) || fs.existsSync(path.join(VAULT, ...key.normalize('NFD').split('/'))), `the manifest key opens a real file`);
-  const r = vm(['search', ODD_BODIES[0], '--json', '-k', '5']);
-  const hit = r.json.results.find((/** @type {any} */ x) => x.vaultPath.startsWith('Odd/Why & how'));
-  assert(hit, 'the note with punctuation in its name is found');
+  // The first odd name this system could hold: the one full of punctuation on macOS and Linux, the one with an accent and an emoji on Windows.
+  const which = ODD_NAMES.findIndex((name) => oddWritten.includes(path.join('Odd', name)));
+  assert(which >= 0, 'no odd-named note could be written at all');
+  const stem = ODD_NAMES[which].slice(0, 9).normalize('NFC');
+  const r = vm(['search', ODD_BODIES[which], '--json', '-k', '5']);
+  const hit = r.json.results.find((/** @type {any} */ x) => x.vaultPath.startsWith(`Odd/${stem}`));
+  assert(hit, 'the note with an odd name is found');
   assert(fs.existsSync(hit.path), 'path opens the file');
   const file = new URL(hit.link).searchParams.get('file');
-  eq(file, `${hit.vaultPath}#Odd name 0`, 'the link decodes back to the vault path and heading');
+  eq(file, `${hit.vaultPath}#Odd name ${which}`, 'the link decodes back to the vault path and heading');
   assert(!/[!'()*]/.test(hit.link.split('file=')[1]), 'strictly encoded');
-  const spaced = keys.find((k) => k.includes('Trailing space / Leading space.md'));
-  assert(spaced, 'path segments are never trimmed');
+  if (oddWritten.includes(path.join('Odd', 'Trailing space ', ' Leading space.md'))) {
+    const spaced = keys.find((k) => k.includes('Trailing space / Leading space.md'));
+    assert(spaced, 'path segments are never trimmed');
+  }
   return `${keys.length} odd-named notes round-trip`;
 });
 

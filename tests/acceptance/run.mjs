@@ -746,7 +746,7 @@ await step('S1', 'the screen reports, masks and never drops a passage', () => {
 
 await step('S2', 'odd file names: ids, paths and links round-trip', () => {
   const idx = readIndex(MAIN); const keys = Object.keys(idx.manifest.notes).filter((k) => k.startsWith('Odd/'));
-  eq(keys.length, oddWritten.length, `odd-named notes indexed, of the ${oddWritten.length} this system could hold`);
+  eq(keys.length, oddWritten.length, `odd-named notes indexed, of the ${oddWritten.length} this system could hold (indexed: ${keys.join(' | ')}; written: ${oddWritten.join(' | ')})`);
   assert(keys.length >= (WIN ? 2 : 4), `odd-named notes indexed: ${keys.length}`);
   for (const key of keys) assert(fs.existsSync(path.join(VAULT, ...key.normalize('NFC').split('/'))) || fs.existsSync(path.join(VAULT, ...key.normalize('NFD').split('/'))), `the manifest key opens a real file`);
   // The first odd name this system could hold: the one full of punctuation on macOS and Linux, the one with an accent and an emoji on Windows.

@@ -1,0 +1,28 @@
+// @ts-check
+// Two logs per index folder. Neither ever holds note text, note names or search questions.
+import crypto from 'node:crypto';
+import path from 'node:path';
+import { appendFile, ensureDir } from './store/safe-write.js';
+
+/** A note is logged by this key, never by its name. @param {string} vaultPath */
+export function noteKey(vaultPath) {
+  return crypto.createHash('sha256').update(vaultPath).digest('hex').slice(0, 16);
+}
+
+let logDir = /** @type {string | null} */ (null);
+/** @param {string | null} dir */
+export function setLogDir(dir) { logDir = dir; }
+
+function write(name, line) {
+  if (!logDir) return;
+  try { ensureDir(logDir); appendFile(path.join(logDir, name), line.endsWith('\n') ? line : line + '\n'); } catch { /* a log must never stop a command */ }
+}
+
+/** @param {string} message */
+export function debug(message) { write('debug.log', `${new Date().toISOString()} ${message}`); }
+
+/** One line per run, plain key=value. @param {string} command @param {Record<string, string | number>} fields */
+export function runLine(command, fields) {
+  const parts = Object.entries(fields).map(([k, v]) => `${k}=${v}`).join(' ');
+  write('sync.log', `${new Date().toISOString().replace(/\.\d+Z$/, 'Z')} ${command} ${parts}`);
+}

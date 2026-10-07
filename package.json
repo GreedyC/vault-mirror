@@ -1,0 +1,19 @@
+{
+  "name": "vault-mirror",
+  "version": "0.1.0",
+  "description": "Keeps one Obsidian vault and one local ruvector index in step, so an AI agent searches the index first. It only reads your notes.",
+  "type": "module",
+  "bin": { "vault-mirror": "bin/vault-mirror.js" },
+  "files": ["bin", "src", "examples", "docs/BENCHMARKS.md", "README.md", "LICENSE", "npm-shrinkwrap.json"],
+  "engines": { "node": ">=20" },
+  "license": "MIT",
+  "scripts": {
+    "test": "node --test tests/unit/",
+    "acceptance": "node tests/acceptance/run.mjs --vault tests/fixtures/vault",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src bin tests"
+  },
+  "dependencies": { "ruvector": "0.3.3" },
+  "overrides": { "@ruvector/core": "0.1.32" },
+  "devDependencies": { "eslint": "^9.0.0", "typescript": "^5.6.0", "@types/node": "^24.0.0" }
+}

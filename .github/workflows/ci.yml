@@ -96,9 +96,6 @@ jobs:
       - name: Show doctor's debug log when it failed
         if: failure()
         run: cat ~/.vault-mirror/logs/debug.log || true
-      - name: TEMPORARY engine diagnosis
-        if: ${{ !cancelled() }}
-        run: node tests/acceptance/diagnose-engine.mjs
       # Runs after a failed doctor too: the job still fails, and the log says how far the real commands get.
       - name: Acceptance (end to end on the invented fixture vault)
         if: ${{ !cancelled() }}
@@ -139,10 +136,6 @@ jobs:
       - name: The command answers in bash
         shell: bash
         run: vault-mirror --version
-      - name: TEMPORARY engine diagnosis
-        if: runner.os == 'Windows'
-        shell: bash
-        run: npm ci --no-audit --no-fund && node --expose-gc tests/acceptance/diagnose-engine.mjs
       # No shell is set: PowerShell on Windows, bash elsewhere, as a member would have it.
       - name: The first ten minutes of a member (real output and timings)
         run: node tests/acceptance/member-smoke.mjs --installed --default-home

@@ -1,0 +1,15 @@
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: monthly
+    # ruvector and its core are pinned on purpose: every index depends on their exact behaviour.
+    # They are bumped by hand, with the flat-index self-test and the acceptance run.
+    ignore:
+      - dependency-name: ruvector
+      - dependency-name: "@ruvector/core"

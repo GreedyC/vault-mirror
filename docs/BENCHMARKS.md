@@ -2,7 +2,7 @@
 
 Measured numbers for vault-mirror 0.1.0. Nothing here is a promise for another computer.
 
-**Read this first.** Every number below was taken on one machine while other heavy jobs were running on it (load average between 8 and 16 on 16 cores). So every speed is labelled **busy** and is a rough lower bound. None of them may be quoted in a README, guide or slide until it has been measured again with nothing else running.
+**Read this first.** Every number below was taken on one machine while other heavy jobs were running on it (load average between 8 and 16 on 16 cores). So every speed is labelled **busy** and is a rough lower bound. The README quotes only the section "Measured again for the README" below and the scale check, each with its load average beside it. No number here has been taken on an idle machine yet.
 
 | | |
 | --- | --- |
@@ -125,6 +125,28 @@ How to read it, and how not to:
 - With one wording, the list found the one exact question that the top 3 by meaning missed. With one wording it did not find the one reworded question the list by meaning missed (rank 10 by meaning); three wordings in one call did, at rank 1.
 - This vault is small and these twenty questions come from one author, so nearly every cell is at its ceiling and the table cannot show how much the list helps on a large vault. The larger study that led to this feature (60 questions, outside this repo) found the index's top 3 plus a keyword top 3 at 27 of 30 reworded and 30 of 30 exact, against 25 and 24 for the top 6 by meaning. **Not a number to print**, as with every recall figure here.
 - One more thing was tried and left out: listing a passage only when it scores at least 30%, 50% or 70% of the best passage for its wording. On these twenty questions it changed no count in the table, and across the forty searches it shortened the lists from 105 passages in all to 105, 101 and 85, so there was no evidence for the rule and it was not added.
+
+## Measured again for the README
+
+Same machine and versions, Oct 6, 2026, on branch `feat/exact-words`, practice vault (176 notes, 2,199 passages). Fewer jobs were running than for the tables above, but the machine was not idle: the load average was 4.6 when the first sync started and 5.7 to 6.0 for everything after it. Each repeated command was run 7 times, a cold process each time; the range is written out.
+
+| Operation | Measured | Load average |
+| --- | --- | --- |
+| First sync, 4 readers, low priority (the tool's default) | 60.1 s for 2,199 passages; 214.8 CPU-seconds; peak memory 1.85 GB | 4.6 at the start, 6.0 at the end |
+| Sync with nothing changed | 0.04 to 0.05 s | 6.0 |
+| `status` | 0.11 to 0.12 s | 6.0 |
+| Search, one wording | 0.36 to 0.37 s | 6.0 |
+| Search, one wording, `--no-sync` | 0.36 to 0.37 s | 5.8 |
+| Search, three wordings in one call | 0.36 to 0.38 s | 5.8 |
+| Sync after one edited note (one run) | 1.06 s | 5.7 |
+| `status --verify` (one run) | 0.33 s | 5.7 |
+| `rebuild` (one run) | 0.14 s | 5.7 |
+| Peak memory, search; `status` (one run each) | 0.71 GB; 0.07 GB | 5.7 |
+| Index folder on disk | 13 MB (8.5 MB engine file, 4.1 MB sidecar, 0.26 MB exact-words table) | |
+
+The tool's own breakdown of one of those searches (`--no-sync`): model load and question 0.255 s, opening the engine 0.031 s (the probe child took 0.216 s alongside the model load), search 0.002 s, exact-words list 0.002 s, reading passages back 0.001 s.
+
+The README's first-run example and its demo recording use the invented fixture vault cut down to its plain folders (15 notes that belong in the index, 32 passages): the first sync took 2.0 to 2.2 s in each of five runs, and a search with one wording 0.29 s by the tool's own count.
 
 ## Items the spec listed as "not measured by anything yet"
 

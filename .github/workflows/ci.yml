@@ -1,0 +1,59 @@
+name: CI
+
+# Unit tests, type check and lint on macOS, Linux and Windows.
+# The unit tests need no network and no reading model. The end-to-end acceptance
+# script downloads the model and takes minutes, so it runs on request only.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      acceptance:
+        description: Also run the end-to-end acceptance script
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: ${{ matrix.os }}, Node ${{ matrix.node }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, ubuntu-latest, windows-latest]
+        node: [20, 22, 24]
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+          cache-dependency-path: npm-shrinkwrap.json
+      # Never --omit=optional: the native engine is an optional package.
+      - run: npm ci
+      # The glob is left to bash, so the same line works on every Node version in the matrix.
+      - name: Unit tests
+        run: node --test tests/unit/*.test.js
+      - name: Type check
+        run: npm run typecheck
+      - name: Lint
+        run: npm run lint
+      - name: Doctor (loads the native engine; may download the reading model)
+        if: ${{ inputs.acceptance }}
+        run: node bin/vault-mirror.js doctor
+      - name: Acceptance (end to end on the invented fixture vault)
+        if: ${{ inputs.acceptance }}
+        run: node tests/acceptance/run.mjs --vault tests/fixtures/vault

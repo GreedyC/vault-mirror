@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 452 96" role="img" aria-labelledby="t d">
+  <title id="t">vault-mirror</title>
+  <desc id="d">A note on the left and its mirror image on the right, with the name vault-mirror.</desc>
+  <g fill="none" stroke-width="4" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="8" y="14" width="32" height="68" rx="6" stroke="#1f2328"/>
+    <path d="M17 31h14M17 43h14M17 55h9" stroke="#1f2328"/>
+    <path d="M50 8v80" stroke="#8250df" stroke-dasharray="2 9"/>
+    <rect x="60" y="14" width="32" height="68" rx="6" stroke="#8250df"/>
+    <path d="M69 31h14M69 43h14M74 55h9" stroke="#8250df"/>
+  </g>
+  <text x="114" y="64" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="46" font-weight="700" fill="#1f2328">vault-<tspan fill="#8250df">mirror</tspan></text>
+</svg>

@@ -23,3 +23,9 @@ passages.jsonl
 manifest.json
 progress.json
 tmp/
+
+# secrets and editor files
+.env
+.env.*
+.vscode/
+.idea/

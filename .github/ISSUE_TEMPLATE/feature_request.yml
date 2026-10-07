@@ -1,0 +1,26 @@
+name: Idea or feature request
+description: Something vault-mirror could do, or do better
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        vault-mirror has a narrow promise: keep one vault and one local index in step, and only ever read the notes. Ideas that make that promise stronger or clearer fit best. See "What it is not" in the README for what is out of scope on purpose.
+  - type: textarea
+    id: problem
+    attributes:
+      label: What are you trying to do?
+      description: The situation, in plain words. What gets in the way now?
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: What would help?
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: What have you tried instead?
+      description: Another tool, a workaround, plain file search.

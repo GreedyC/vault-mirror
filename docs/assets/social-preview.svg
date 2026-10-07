@@ -1,0 +1,56 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 640" width="1280" height="640" font-family="ui-sans-serif, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif">
+  <title>vault-mirror: Obsidian is how you read your notes. vault-mirror is how your AI finds them.</title>
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M1 1.5 8.5 5 1 8.5" fill="none" stroke="#9198a1" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></marker>
+    <marker id="b" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M1 1.5 8.5 5 1 8.5" fill="none" stroke="#ab7df8" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></marker>
+  </defs>
+  <rect width="1280" height="640" fill="#0d1117"/>
+
+  <!-- wordmark -->
+  <g transform="translate(110 78) scale(1.15)">
+    <g fill="none" stroke-width="4" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="8" y="14" width="32" height="68" rx="6" stroke="#f0f6fc"/>
+      <path d="M17 31h14M17 43h14M17 55h9" stroke="#f0f6fc"/>
+      <path d="M50 8v80" stroke="#ab7df8" stroke-dasharray="2 9"/>
+      <rect x="60" y="14" width="32" height="68" rx="6" stroke="#ab7df8"/>
+      <path d="M69 31h14M69 43h14M74 55h9" stroke="#ab7df8"/>
+    </g>
+    <text x="114" y="64" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="46" font-weight="700" fill="#f0f6fc">vault-<tspan fill="#ab7df8">mirror</tspan></text>
+  </g>
+
+  <!-- promise -->
+  <text x="118" y="262" font-size="42" font-weight="700" fill="#f0f6fc">Obsidian is how you read your notes.</text>
+  <text x="118" y="318" font-size="42" font-weight="700" fill="#f0f6fc"><tspan fill="#ab7df8">vault-mirror</tspan> is how your AI finds them.</text>
+
+  <!-- the four boxes -->
+  <g transform="translate(118 372)">
+    <g stroke-width="1.5" fill="#151b23">
+      <rect x="0" y="0" width="208" height="92" rx="10" stroke="#3d444d"/>
+      <rect x="278" y="0" width="208" height="92" rx="10" stroke="#ab7df8" stroke-width="2"/>
+      <rect x="556" y="0" width="208" height="92" rx="10" stroke="#3d444d"/>
+      <rect x="834" y="0" width="208" height="92" rx="10" stroke="#3d444d"/>
+    </g>
+    <g text-anchor="middle" font-size="22" font-weight="600" fill="#f0f6fc">
+      <text x="104" y="40">Your vault</text>
+      <text x="382" y="40" fill="#ab7df8" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="21">vault-mirror</text>
+      <text x="660" y="40">The index</text>
+      <text x="938" y="40">Your AI</text>
+    </g>
+    <g text-anchor="middle" font-size="17" fill="#9198a1">
+      <text x="104" y="68">you read here</text>
+      <text x="382" y="68">never edits a note</text>
+      <text x="660" y="68">on this computer</text>
+      <text x="938" y="68">searches first</text>
+    </g>
+    <g fill="none" stroke="#9198a1" stroke-width="1.8" stroke-linecap="round">
+      <path d="M216 46H270" marker-end="url(#a)"/>
+      <path d="M494 46H548" marker-end="url(#a)"/>
+      <path d="M826 46H772" marker-end="url(#a)" marker-start="url(#a)"/>
+    </g>
+    <path d="M938 99V118Q938 130 926 130H116Q104 130 104 118V101" fill="none" stroke="#ab7df8" stroke-width="2" stroke-linecap="round" marker-end="url(#b)"/>
+  </g>
+
+  <!-- footer -->
+  <text x="118" y="566" font-size="22" fill="#9198a1">It only reads your notes.  ·  Always 1:1.  ·  Runs on your computer.</text>
+  <text x="1162" y="566" text-anchor="end" font-size="22" fill="#9198a1" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace">HeroForgeAI/vault-mirror</text>
+</svg>

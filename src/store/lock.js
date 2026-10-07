@@ -34,6 +34,11 @@ process.on('exit', () => { for (const [file, token] of held) { try { if (readLoc
  * @returns {Promise<{ token: string, stillOurs: () => boolean, release: () => void }>}
  */
 export async function acquireLock(file, opts) {
+  const mine = held.get(file);
+  if (mine && readLock(file)?.token === mine) {
+    // This process already holds it (a lock is held until the process exits).
+    return { token: mine, stillOurs: () => readLock(file)?.token === mine, release: () => {} };
+  }
   const token = crypto.randomBytes(8).toString('hex');
   const body = JSON.stringify({ pid: process.pid, token, command: opts.command, startedAt: Date.now() });
   const deadline = Date.now() + opts.waitMs;

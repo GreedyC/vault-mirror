@@ -4,6 +4,8 @@
 
 /** @typedef {{ text: string, line: number }} Unit */
 
+const LIST_ITEM = /^\s*(?:[-*+]|\d+[.)])\s|;\s/;
+
 /** @param {string[]} parts @param {string} glue @param {number} budget @param {(t: string) => number} count @param {(part: string) => string[]} splitMore */
 function fill(parts, glue, budget, count, splitMore) {
   /** @type {string[]} */
@@ -85,7 +87,9 @@ export function pack(units, budgetFor, count) {
       for (let cut = 1; cut < all.length; cut++) {
         left += sizes[cut - 1];
         if (left > budgetA || total - left > budgetB) continue;
-        const gap = Math.abs(left - (total - left));
+        // Prefer not to cut between two list items or two table rows.
+        const insideList = LIST_ITEM.test(all[cut - 1].text) && LIST_ITEM.test(all[cut].text);
+        const gap = Math.abs(left - (total - left)) + (insideList ? total / 2 : 0);
         if (gap < bestGap) { bestGap = gap; best = cut; }
       }
       groups[groups.length - 2] = { units: all.slice(0, best), sizes: sizes.slice(0, best) };

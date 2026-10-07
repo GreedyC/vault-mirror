@@ -148,7 +148,7 @@ export async function ensureEngine(ctx) {
   }
   const s = secs();
   if (damaged) notices.push(`The index file was damaged. It was rebuilt from saved passages (${s.toFixed(1)} s). Your notes were not touched.`);
-  else if (!ctx.quiet && cur) notices.push(`The index was reloaded from saved passages (${s.toFixed(1)} s).`);
+  else if (!ctx.quiet) notices.push(`The index was reloaded from saved passages (${s.toFixed(1)} s).`);
   debug(`engine ${damaged ? 'rebuilt after damage' : 'reloaded'} rows=${want} seconds=${s}`);
   return { engine, how: damaged ? 'damaged' : 'rebuilt', seconds: s, notices, warnings, probeMs };
 }

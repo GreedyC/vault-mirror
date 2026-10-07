@@ -176,7 +176,7 @@ The exact facts behind those rules, for anyone who wants to check them:
 - **What goes over the network.** vault-mirror opens no network connection of its own. On first use the `ruvector` library downloads the reading model once (about 90 MB, from `huggingface.co`), and vault-mirror checks its SHA-256 before using it. There is no telemetry and no account.
 - **What your AI sees.** The passages a search returns go to Claude or Codex and on to that service, as any file your AI reads does. vault-mirror does not change that and does not claim to.
 - **What the index holds.** A plain-text copy of your passages, on this computer only. Treat the index folder like the notes: keep it out of git and out of cloud-synced folders. `init` and `doctor` warn if it sits in one.
-- **Leaving a note out.** Put `index: false` in a note's properties, or list a folder under `exclude`. That keeps it out of the index. It does not hide the file from an AI that can read the folder.
+- **Leaving a note out.** Put `index: false` in a note's properties, or list a folder under `exclude`. That keeps it out of the index. If a name under `exclude` matches no folder, vault-mirror tells you, so a typo never looks like a folder left out. It does not hide the file from an AI that can read the folder.
 
 vault-mirror makes no HIPAA claim. It is not affiliated with Obsidian.
 

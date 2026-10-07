@@ -5,7 +5,8 @@ import path from 'node:path';
 import { buildPlan, safetyStops, syncWouldStop, sha256 } from '../../src/sync/plan.js';
 import { savedCounts } from '../../src/sync/run.js';
 import { printStatus } from '../../src/cli/commands/status.js';
-import { walkVault, noteKeyOf } from '../../src/vault/walk.js';
+import { walkVault, noteKeyOf, excludePath } from '../../src/vault/walk.js';
+import { initCommand } from '../../src/cli/commands/init.js';
 import { readObsidianExcludes } from '../../src/vault/obsidian-registry.js';
 import { chunk } from '../../src/chunker/index.js';
 import { noteKey } from '../../src/log.js';
@@ -204,6 +205,60 @@ test('the walk: stubs before the dot-skip, .MD is a note, other files counted, n
   assert.deepEqual(reasons, { 'Sub/Cloud note.md': 'not-downloaded', 'Nested/Inner.md': 'nested-vault', 'Templates/Daily.md': 'excluded', 'Templates/Deep/Weekly.md': 'excluded', 'Link.md': 'symlink', 'Private/P.md': 'obsidian-excluded', 'Sub/Draft-12.md': 'obsidian-excluded' });
   assert.equal(walkVault(root, { exclude: ['Templates'], obsidianExcludes: false }).notes.length, 5, 'obsidianExcludes: false ignores that setting');
   assert.ok(!walkVault(root, { exclude: ['Temp'] }).leftOut.some((l) => l.reason === 'excluded'), 'an exclude is a whole folder name, not a prefix of one');
+});
+
+test('exclude: the same folder however it is written, and an entry that matches nothing is never reported as left out', async () => {
+  const root = tmpDir('excl');
+  const put = (/** @type {string} */ rel) => { fs.mkdirSync(path.dirname(path.join(root, rel)), { recursive: true }); fs.writeFileSync(path.join(root, rel), 'some invented words here'); };
+  put('Home.md'); put('Private/P.md'); put('Work/Private/W.md'); put('Templates/Daily.md'); put('.obsidian/templates.json');
+  fs.writeFileSync(path.join(root, '.obsidian', 'templates.json'), JSON.stringify({ folder: 'templates' }));
+  const excluded = (/** @type {string[]} */ exclude) => walkVault(root, { exclude }).leftOut.filter((l) => l.reason === 'excluded').map((l) => l.key).sort();
+
+  for (const way of ['Private', './Private', 'Private/', '/Private/', path.join(root, 'Private'), 'private', 'PRIVATE/']) {
+    const w = walkVault(root, { exclude: [way] });
+    assert.deepEqual(excluded([way]), ['Private/P.md'], `"${way}" leaves out the folder Private`);
+    assert.deepEqual([w.unmatchedExcludes, w.warnings], [[], []]);
+  }
+  assert.deepEqual(excluded(['Work/Private']), ['Work/Private/W.md']);
+  assert.equal(excludePath('C:\\Vault', 'Work\\Private', path.win32), 'Work/Private', 'a Windows path is the same key');
+  assert.equal(excludePath('C:\\Vault', 'C:\\Vault\\Work\\Private\\', path.win32), 'Work/Private');
+  assert.equal(excludePath(root, root), '');
+  assert.equal(excludePath(root, '../Private'), '');
+
+  // A typo matches nothing: the walk says so, and status does not name it as left out.
+  const typo = walkVault(root, { exclude: ['Privat', 'Templates'] });
+  assert.deepEqual(excluded(['Privat', 'Templates']), ['Templates/Daily.md']);
+  assert.deepEqual(typo.unmatchedExcludes, ['Privat']);
+  assert.match(typo.warnings.join('\n'), /^"Privat" is set to be left out, but this vault has no folder or note with that name, so nothing is left out for it\./);
+  assert.deepEqual(walkVault(root, { exclude: ['Private', 'Private/Deep', '.trash'] }).unmatchedExcludes, ['Private/Deep'], 'a dot-folder is always left out, so it is never a miss');
+  put('Private/Deep/D.md');
+  assert.deepEqual(walkVault(root, { exclude: ['Private', 'Private/Deep'] }).unmatchedExcludes, [], 'a folder inside a left-out folder still counts as found');
+  /** @type {string[]} */
+  const lines = [];
+  const s = { inStep: true, checks: [], versions: {}, _leftOutTotal: 1, _plan: { unmatchedExcludes: ['Privat'] },
+    counts: { notesOnDisk: 4, leftOut: { excluded: 1, obsidianExcluded: 0, indexFalse: 0, empty: 0 }, otherFiles: 0, eligible: 3, notesIndexed: 3, passagesRecorded: 3, passagesInEngine: 3, pending: { new: 0, changed: 0, removed: 0 }, unreadable: 0 } };
+  const say = (/** @type {string[]} */ exclude) => { lines.length = 0; printStatus(s, /** @type {any} */ ({ cfg: { vault: { exclude } }, vault: { name: 'v', real: '/v' } }), /** @type {any} */ ({ out: (/** @type {string} */ l = '') => lines.push(l) })); return lines[1]; };
+  assert.match(say(['Privat', 'Templates']), /^In step: yes, with these folders left out: Templates \(/);
+  assert.match(say(['Privat']), /^In step: yes \(/, 'nothing is claimed as left out when nothing matched');
+
+  // init: a folder asked for by name that is not there is refused and nothing is saved.
+  const home = tmpDir('excl-home'); const before = { ...process.env };
+  process.env.VAULT_MIRROR_HOME = home; process.env.VAULT_MIRROR_OBSIDIAN_JSON = path.join(home, 'no-obsidian.json');
+  /** @type {string[]} */
+  const out = [];
+  const ui = /** @type {any} */ ({ out: (/** @type {string} */ l = '') => out.push(l), info() {}, warn: (/** @type {string} */ l) => out.push(l) });
+  const init = (/** @type {string[]} */ exclude) => initCommand({ vaultPath: root, noRule: true, exclude }, ui);
+  try {
+    for (const bad of ['Privat', './Gardn', path.join(path.dirname(root), 'Private'), '.']) {
+      await assert.rejects(init([bad]), (err) => err instanceof VmError && err.code === 'VM_E_USAGE' && err.exitCode === 2 && err.message.includes(`--exclude "${bad}"`) && /Nothing was changed\.$/.test(err.message));
+      assert.ok(!fs.existsSync(path.join(home, 'config.json')), 'a refused init saves nothing');
+    }
+    const first = await init(['./Private', path.join(root, 'Work', 'Private'), 'private']);
+    assert.deepEqual(first.body.excluded, ['Private', 'Work/Private', 'templates'], 'saved as paths inside the vault, once each');
+    assert.equal(first.body.notesFound, 1, 'the templates folder named in another letter case is really left out');
+    assert.ok(out.includes(`Left out the templates folder "templates". To include it, remove it from "exclude" in ${path.join(home, 'config.json')}.`) || out.some((l) => l.startsWith('Left out the templates folder "templates".')));
+    assert.deepEqual((await init(['PRIVATE/'])).body.excluded, ['Private', 'Work/Private', 'templates'], 'a second init adds no second spelling');
+  } finally { process.env.VAULT_MIRROR_HOME = before.VAULT_MIRROR_HOME; process.env.VAULT_MIRROR_OBSIDIAN_JSON = before.VAULT_MIRROR_OBSIDIAN_JSON; if (before.VAULT_MIRROR_HOME === undefined) delete process.env.VAULT_MIRROR_HOME; if (before.VAULT_MIRROR_OBSIDIAN_JSON === undefined) delete process.env.VAULT_MIRROR_OBSIDIAN_JSON; }
 });
 
 test('Obsidian excludes: a missing or broken app.json is ignored, with one warning for a bad entry', () => {

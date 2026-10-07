@@ -36,6 +36,7 @@ import { VmError } from '../errors.js';
  * @property {number} passagesToEmbed
  * @property {number} leaving              notes leaving the index, renames not counted
  * @property {string[]} warnings
+ * @property {string[]} unmatchedExcludes  `exclude` entries that matched nothing in the vault
  */
 
 /** @param {Uint8Array} bytes */
@@ -61,7 +62,7 @@ export async function buildPlan(o) {
   const plan = {
     seen: o.walk.notes.length + o.walk.leftOut.length, eligible: 0, unchanged: 0, touched: [], toEmbed: [], removed: [], dropped: [], renamed: [],
     leftOut: {}, leftOutList: [], leftOutKept: {}, skipped: [], otherFiles: o.walk.otherFiles,
-    pending: { new: 0, changed: 0, removed: 0 }, pendingList: [], passagesToEmbed: 0, leaving: 0, warnings: [...o.walk.warnings],
+    pending: { new: 0, changed: 0, removed: 0 }, pendingList: [], passagesToEmbed: 0, leaving: 0, warnings: [...o.walk.warnings], unmatchedExcludes: [...(o.walk.unmatchedExcludes || [])],
   };
   const leaveOut = (/** @type {string} */ key, /** @type {string} */ reason) => {
     plan.leftOut[reason] = (plan.leftOut[reason] || 0) + 1;

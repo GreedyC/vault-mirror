@@ -27,6 +27,8 @@ The first release.
 
 - The exact-words table kept a note's old word rows when the note was cut again without its content changing. This happens when a second note with the same file name appears or goes: the folder then joins or leaves what the first note's passages are read with, and its cuts can move. Plain `status` still passed; only `status --verify` saw it. The table's per-note key now also carries that flag, so the note's rows are made again. A table written by an earlier build is made again once, by the next search, status or sync. Covered by a unit test and acceptance step X2.
 
+- An `exclude` entry that matched no folder was accepted in silence, and `status` then named that folder as left out while its notes were indexed. This happened with `./Private`, the folder's full path, another letter case (`private` for `Private`, and the templates folder as Obsidian's settings spell it), and `Work\Private` on Windows. All of those now mean the folder they name. An entry that still matches nothing gets a warning from `sync`, `status` and `doctor`, is no longer named by `status`, and `init --exclude` refuses it. Covered by a unit test.
+
 ### Known limits
 
 - Verified on Apple Silicon Macs. Windows, Intel Macs and Linux are not yet verified.

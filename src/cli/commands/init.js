@@ -6,7 +6,7 @@ import { homeDir, loadConfig, saveConfig, indexDirFor, VAULT_DEFAULTS } from '..
 import { checkOneVault, checkIndexOutside, inCloudFolder, CLOUD_VAULT_NOTE, CLOUD_HOME_NOTE } from '../../config/guards.js';
 import { resolveSafe, isInside, vaultRootAbove, tildify, expandHome } from '../../config/paths.js';
 import { configureWriter, writeFile } from '../../store/safe-write.js';
-import { walkVault } from '../../vault/walk.js';
+import { walkVault, excludePath } from '../../vault/walk.js';
 import { lookupVault } from '../../vault/obsidian-registry.js';
 import { stat } from '../../vault/read-only-fs.js';
 import { RULE_BLOCK, RULE_START, RULE_END } from '../../rule-text.js';
@@ -61,14 +61,29 @@ export async function initCommand(args, ui) {
 
   const previous = loadConfig(home);
   const same = previous.vault && (() => { try { return resolveSafe(previous.vault.path) === one.real; } catch { return false; } })();
+  // What was asked for now, as a path inside the vault: "./Private", "Private/" and the folder's full path all mean "Private".
+  /** @type {{ asked: string, entry: string }[]} */
+  const asked = [];
+  for (const e of args.exclude || []) {
+    let full = /^~[\\/]/.test(e) ? expandHome(e) : e;
+    if (path.isAbsolute(full)) { try { full = resolveSafe(full); } catch { /* compared as written */ } }
+    const entry = excludePath(one.real, full);
+    if (!entry) throw new VmError('VM_E_USAGE', { detail: `--exclude "${e}" does not name a folder inside ${tildify(one.real)}, so nothing would be left out. Give the folder's name as it appears inside the vault, for example --exclude "Private". Nothing was changed.` });
+    asked.push({ asked: e, entry });
+  }
+  const sameKey = (/** @type {string} */ a, /** @type {string} */ b) => excludePath(one.real, a).toLowerCase() === excludePath(one.real, b).toLowerCase();
   /** @type {string[]} */
-  const exclude = [...new Set([...(same && previous.vault ? previous.vault.exclude : []), ...(args.exclude || []).map((e) => e.replace(/^\/+|\/+$/g, ''))])];
+  const exclude = [...new Set(same && previous.vault ? previous.vault.exclude : [])];
+  for (const a of asked) if (!exclude.some((x) => sameKey(x, a.entry))) exclude.push(a.entry);
   const templates = templatesFolder(one.real);
   let proposed = null;
-  if (templates && !exclude.includes(templates)) { exclude.push(templates); proposed = templates; }
+  if (templates && !exclude.some((x) => sameKey(x, templates))) { exclude.push(templates); proposed = templates; }
   const walk = walkVault(one.real, { exclude, obsidianExcludes: true });
   const notesFound = walk.notes.length;
   if (notesFound + walk.leftOut.length === 0) throw new VmError('VM_E_USAGE', { detail: `No notes (.md files) were found in ${tildify(one.real)}.` });
+  // A folder asked for by name that is not there is refused: saying yes would index notes the person wanted left out.
+  const missed = asked.find((a) => walk.unmatchedExcludes.includes(a.entry));
+  if (missed) throw new VmError('VM_E_USAGE', { detail: `--exclude "${missed.asked}": this vault has no folder or note with that name, so nothing would be left out. Check the spelling and give the folder's name as it appears inside the vault. Nothing was changed.` });
 
   const vault = { ...VAULT_DEFAULTS, ...(same && previous.vault ? previous.vault : {}), path: one.real, exclude };
   saveConfig(home, { ...previous, vault });

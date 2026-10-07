@@ -21,8 +21,11 @@ export function printStatus(s, ctx, ui) {
   const row = (/** @type {string} */ label, /** @type {number} */ n, extra = '') => ui.out(`  ${label.padEnd(31)}${num(n).padStart(7)}${extra ? `   ${extra}` : ''}`);
   ui.out(`${ctx.vault.name}   ${tildify(ctx.vault.real)}`);
   const pending = c.pending.new + c.pending.changed + c.pending.removed;
+  // Only folders the walk really found are named as left out; an entry that matched nothing has its own warning.
+  const missed = s._plan?.unmatchedExcludes || [];
+  const leftOutFolders = v.exclude.filter((/** @type {string} */ e) => !missed.includes(e));
   if (s.running) ui.out(`A sync is running: ${s.running.percent}% done${s.running.etaSeconds != null ? `, ${eta(s.running.etaSeconds)}` : ''}. Searches work now and cover what is saved so far.`);
-  else if (s.inStep) ui.out(`In step: yes${v.exclude.length ? ', with these folders left out: ' + v.exclude.join(', ') : ''} (${s._verify ? 'every note was read and every passage checked' : 'checked by size and date; --verify reads every note'})`);
+  else if (s.inStep) ui.out(`In step: yes${leftOutFolders.length ? ', with these folders left out: ' + leftOutFolders.join(', ') : ''} (${s._verify ? 'every note was read and every passage checked' : 'checked by size and date; --verify reads every note'})`);
   else if (!s._manifest) ui.out('In step: not yet. Nothing is indexed yet.');
   else ui.out(`In step: not yet. ${pending ? `${num(pending)} ${pending === 1 ? 'note is' : 'notes are'} waiting to sync.` : 'The index needs a refresh.'}`);
   ui.out('');

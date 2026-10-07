@@ -13,6 +13,7 @@ import { readObsidianExcludes } from './obsidian-registry.js';
  * @property {number} otherFiles         images, PDFs, canvases and the like: counted, never read
  * @property {string[]} warnings
  * @property {string[]} unreadableDirs   folders that could not be listed (vault-relative)
+ * @property {string[]} unmatchedExcludes `exclude` entries that matched no folder or note, as written
  */
 
 /** The manifest key for a vault-relative path: forward slashes, NFC, no-break spaces as ordinary spaces. @param {string} rel */
@@ -20,12 +21,28 @@ export function noteKeyOf(rel) {
   return rel.split(path.sep).join('/').normalize('NFC').replace(/\u00a0/g, ' ');
 }
 
-/** @param {string} key @param {string[]} prefixes */
-function underAny(key, prefixes) {
-  return prefixes.some((p) => {
-    const clean = p.replace(/^\/+|\/+$/g, '');
-    return clean && (key === clean || key.startsWith(clean + '/'));
-  });
+/**
+ * An `exclude` entry as a vault key: forward slashes, no `./`, no outer slashes, and a full path
+ * to a folder of this vault made relative to it. Any other path with a leading slash is read as
+ * starting at the vault folder. '' when it names nothing inside the vault.
+ * @param {string} root the vault's real path
+ * @param {string} entry
+ * @param {{ isAbsolute(p: string): boolean, relative(a: string, b: string): string, normalize(p: string): string, sep: string }} [p] the platform's path rules
+ */
+export function excludePath(root, entry, p = path) {
+  if (typeof entry !== 'string' || !entry) return '';
+  let rel = entry;
+  if (p.isAbsolute(entry)) {
+    const inside = p.relative(root, entry) || '.';
+    if (inside === '.' || !(inside === '..' || inside.startsWith('..' + p.sep) || p.isAbsolute(inside))) rel = inside;
+  }
+  const key = noteKeyOf(p.normalize(rel).split(p.sep).join('/')).replace(/^\/+|\/+$/g, '');
+  return key === '.' || key === '..' || key.startsWith('../') ? '' : key;
+}
+
+/** Why an entry that matched nothing is worth a line: the person believes that folder is left out. @param {string} entry */
+export function unmatchedExcludeNote(entry) {
+  return `"${entry}" is set to be left out, but this vault has no folder or note with that name, so nothing is left out for it. Check the spelling under "exclude" in config.json.`;
 }
 
 /**
@@ -34,9 +51,17 @@ function underAny(key, prefixes) {
  * @returns {WalkResult}
  */
 export function walkVault(root, opts = {}) {
-  const exclude = opts.exclude || [];
+  // Letter case is ignored, as for Obsidian's own excludes: on a Mac or Windows disk "private" is the folder "Private".
+  // A name that starts with a dot is always left out, so such an entry never counts as a miss.
+  const exclude = (opts.exclude || []).map((raw) => { const key = excludePath(root, raw).toLowerCase(); return { raw, key, hit: key.split('/').some((seg) => seg.startsWith('.')) }; });
+  /** Is this key under an `exclude` entry? Every entry that matches is marked as used. @param {string} key */
+  const underAny = (key) => {
+    const k = key.toLowerCase(); let any = false;
+    for (const x of exclude) if (x.key && (k === x.key || k.startsWith(x.key + '/'))) { x.hit = true; any = true; }
+    return any;
+  };
   /** @type {WalkResult} */
-  const result = { notes: [], leftOut: [], otherFiles: 0, warnings: [], unreadableDirs: [] };
+  const result = { notes: [], leftOut: [], otherFiles: 0, warnings: [], unreadableDirs: [], unmatchedExcludes: [] };
   const obsidian = opts.obsidianExcludes === false ? { test: () => false, warning: null } : readObsidianExcludes(root);
   if (obsidian.warning) result.warnings.push(obsidian.warning);
   /** @type {Map<string, true>} */
@@ -65,7 +90,8 @@ export function walkVault(root, opts = {}) {
       if (e.isDir) {
         const key = noteKeyOf(childRel);
         const nested = !forced && Boolean(stat(path.join(e.abs, '.obsidian'))?.isDir);
-        visit(e.abs, childRel, forced || (nested ? 'nested-vault' : underAny(key, exclude) ? 'excluded' : null));
+        const excluded = underAny(key);
+        visit(e.abs, childRel, forced || (nested ? 'nested-vault' : excluded ? 'excluded' : null));
         continue;
       }
       if (!e.isFile) continue;
@@ -73,12 +99,15 @@ export function walkVault(root, opts = {}) {
       const key = noteKeyOf(childRel);
       const s = stat(e.abs);
       if (!s) continue; // it vanished between the listing and the stat
-      const reason = forced || (underAny(key, exclude) ? 'excluded' : obsidian.test(key) ? 'obsidian-excluded' : seen.has(key) ? 'duplicate-path' : null);
+      const excluded = underAny(key);
+      const reason = forced || (excluded ? 'excluded' : obsidian.test(key) ? 'obsidian-excluded' : seen.has(key) ? 'duplicate-path' : null);
       if (reason) { result.leftOut.push({ key, reason, size: s.size, mtimeMs: s.mtimeMs, abs: e.abs }); continue; }
       seen.set(key, true);
       result.notes.push({ key, abs: e.abs, size: s.size, mtimeMs: s.mtimeMs });
     }
   }
   visit(root, '', null);
+  result.unmatchedExcludes = exclude.filter((x) => !x.hit).map((x) => x.raw);
+  for (const raw of result.unmatchedExcludes) result.warnings.push(unmatchedExcludeNote(raw));
   return result;
 }

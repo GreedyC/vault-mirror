@@ -1,0 +1,25 @@
+# dependencies
+node_modules/
+
+# tool droppings: never part of this project
+ruvector.db
+*.db
+*.rvf
+.claude/
+.claude-flow/
+.swarm/
+.DS_Store
+
+# index, log and test output: an index holds note text
+vault-index/
+.vault-mirror/
+indexes/
+logs/
+*.log
+*.out
+*.tgz
+*.f32
+passages.jsonl
+manifest.json
+progress.json
+tmp/

@@ -163,8 +163,8 @@ export async function doctorCommand(ui) {
       const exact = createExact(all, (i) => `p${i}`, dims);
       let agree = true;
       for (const q of [rows[5].vector, outlier, fakeVector(dims, 999)]) {
-        const a = (await engine.search(q, 10)).map((h) => h.id).join(','); const b = (await exact.search(q, 10)).map((h) => h.id).join(',');
-        if (a !== b) agree = false;
+        const a = await engine.search(q, 10); const b = await exact.search(q, 10);
+        if (a.length !== b.length || a.some((h, i) => Math.abs(h.score - b[i].score) > 1e-4) || a[0].id !== b[0].id) agree = false;
       }
       add('engine-round-trip', agree ? 'ok' : 'fail', agree ? 'The engine\'s top results equal an exact scan\'s.' : 'The engine\'s results differ from an exact scan.', agree ? null : 'Install vault-mirror again so the tested versions are used.');
     } catch (e) {

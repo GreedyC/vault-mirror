@@ -105,9 +105,10 @@ export async function computeStatus(ctx, opts, ui) {
     for (let s = 0; s < 50 && total > 0; s++) {
       const at = Math.floor((s * total) / 50);
       const q = vectors.slice(at * dimensions, (at + 1) * dimensions);
-      const a = (await engine.search(q, 10)).map((h) => h.id).sort().join('|');
-      const b = (await exact.search(q, 10)).map((h) => h.id).sort().join('|');
-      tried++; if (a === b) agree++;
+      // Compared by score, not by id: two notes that hold the same sentence have the same vector,
+      // and either one may fill the last place.
+      const a = await engine.search(q, 10); const b = await exact.search(q, 10);
+      tried++; if (a.length === b.length && a.every((h, i) => Math.abs(h.score - b[i].score) < 1e-4)) agree++;
     }
     checks.push({ name: 'verify-spot-check', ok: agree === tried, detail: `${agree} of ${tried} sampled searches agree with an exact scan (a spot-check)` });
     const scan = scanLog(loaded.dataDir, 0, manifest.sidecar.logBytes);

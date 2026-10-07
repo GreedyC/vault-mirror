@@ -48,7 +48,7 @@ const ctx = /** @type {any} */ ({ home, cfg, vault: { real: vaultReal, name: 'va
 const dataDir = path.join(indexDir, 'data-0001');
 const manifest = newManifest({ dataName: 'data-0001', vault: { name: 'vault', path: vaultReal, pathHash: path.basename(indexDir).slice(-8) }, chunker: chunkerBlock(ctx, embedder), embedding: { ...embedder.identity(null), spaceId: null }, engine: engineBlock() });
 manifest.sidecar.logBytes = createDataDir(dataDir, {});
-let seed = 12345; const rnd = () => { seed = (seed * 1103515245 + 12345) % 2147483648; return seed / 2147483648; };
+let seed = 12345; const rnd = () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
 const gauss = () => Math.sqrt(-2 * Math.log(rnd() || 1e-9)) * Math.cos(2 * Math.PI * rnd());
 const centres = Array.from({ length: 300 }, () => Float32Array.from({ length: dims }, gauss));
 const makeVector = () => { const c = centres[Math.floor(rnd() * 300)]; const v = new Float32Array(dims); let n = 0; for (let d = 0; d < dims; d++) { v[d] = c[d] + 0.6 * gauss(); n += v[d] * v[d]; } n = Math.sqrt(n); for (let d = 0; d < dims; d++) v[d] /= n; return v; };

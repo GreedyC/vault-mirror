@@ -10,6 +10,10 @@ A change to how notes are cut into passages, or to the reading model, makes ever
 
 - Regression tests for hour-long durations, exact minutes and the short-wait ETA rounding and five-second floor.
 
+### Fixed
+
+- `rebuild --full` rejects invalid `--workers` values with the same usage error as `sync`, before starting to re-read notes.
+
 ### Changed
 
 - README: says who builds and maintains the project (Mak Allen of the HeroForge.AI team) and where to find him on X.

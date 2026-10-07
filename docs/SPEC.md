@@ -147,7 +147,7 @@ One current vault. `init` on another folder switches to it and says so; each vau
     "workers": "auto",
     "obsidianExcludes": true,
     "searchAutoSyncMaxPassages": 20,
-    "resultCount": 5
+    "resultCount": 8
   },
   "embedding": { "model": "all-MiniLM-L6-v2" }
 }
@@ -163,7 +163,7 @@ One current vault. `init` on another folder switches to it and says so; each vau
 | `obsidianExcludes` | `true` | Also leave out what Obsidian's own "Excluded files" setting names (section 10). `false` ignores that setting |
 | `embedding.model` | `"all-MiniLM-L6-v2"` | The working default. It is a key into the model table in `src/embed/models.js` (section 9), which is where a different model plugs in. Changing it re-reads every note once |
 | `searchAutoSyncMaxPassages` | 20 | A search syncs first only when the waiting work is this small (seconds on a slow laptop) |
-| `resultCount` | 5 | Notes returned by a search |
+| `resultCount` | 8 | Notes returned by a search |
 
 Precedence: command flag, then `VAULT_MIRROR_HOME`, then `config.json`, then defaults. `~` is expanded. The file is written atomically (temp file, then rename).
 
@@ -260,7 +260,7 @@ added 1,230 · updated 0 · renamed 0 · removed 0 · unchanged 0 · left out 10
 
 ### `search "<question>"`
 
-- Flags: `-k, --count <n>` (default 5), `--no-sync`, `--no-exact-words`.
+- Flags: `-k, --count <n>` (default 8), `--no-sync`, `--no-exact-words`.
 - Flow: guards; if no sync has ever completed and nothing is saved, stop with `Nothing is indexed yet. Run vault-mirror sync first.` (exit 2, `VM_E_NOT_SYNCED`); a quick sync first unless `--no-sync`, another sync is running, or the waiting work exceeds `searchAutoSyncMaxPassages` (then a one-line notice and it searches what is there); bring the engine in step with the manifest (section 8); embed the question; fetch `max(count × 8, 50)` passages; drop any hit the manifest does not know; keep the best passage per note; if fewer than `count` notes remain and the fetch came back full, fetch four times as many once and repeat; print.
 - Because the manifest is saved after every group of notes, a search during a long first sync covers everything saved so far and says so in one notice.
 - Result shape (the public contract):
@@ -1015,6 +1015,17 @@ Choices made while building, each the simplest that kept a promise:
 - **A phrase is a filter, then BM25 ranks.** A passage that lacks a quoted phrase is not listed for that wording; among those that hold it, the order is the BM25 order of the wording's words. At most 300 passages are read back per wording to check a phrase.
 - **No stemming and no accent folding.** `tomato` does not match `tomatoes`. The list says "exact words" and means it; the list by meaning is what covers other forms.
 - **No table entry in the manifest.** The table is checked against the manifest, not recorded in it, so the manifest schema did not change and an index made before this feature gains its table at the first search, status or sync (a fraction of a second, once).
+
+### What the v0.1.0 tag holds
+
+The tag is cut from `main`, which holds, in order: the core that passed three rounds of independent proof, the exact-words list (two more proof rounds, both passed, on top of that core), then the README, the repo files and three small fixes to what `doctor` prints. The whole suite (unit tests, typecheck, lint, the acceptance script) was run again on the tagged commit, and the packed tarball was installed into an empty folder and run through `doctor`, a first sync, `status --verify` and a search.
+
+Not in the tag:
+
+- **Warm mode.** Not built. The door is open (`searchReady`, section 6) and nothing else of it exists: no helper process, no socket, no setting. It ships only once its own tests pass (a helper crash, a stale socket file, a sync while warm, two helpers racing, idle exit, no leftover process).
+- Everything tagged `[v0.1.1]` or `[L]` in section 18.
+
+Minor findings from the exact-words proof that stay open in 0.1.0, each recorded in `CHANGELOG.md` under "Known limits": an alias in a note's properties is not an exact word; an accented letter stored as two characters does not match the same letter stored as one; a rare word inside a long question may not reach the three-entry list unless it is quoted or given as its own wording; a quoted phrase built around one very common word can be missed in a large vault; the exact-words table is checked in full only by `status --verify`; one edit to a very long note re-reads every passage of that note.
 
 ### Changed, with the reason
 

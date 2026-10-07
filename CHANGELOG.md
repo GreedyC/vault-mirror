@@ -29,6 +29,18 @@ The first release.
 - Every benchmark so far comes from one machine. See [`docs/BENCHMARKS.md`](docs/BENCHMARKS.md).
 - One current vault at a time. No MCP server, no file watcher, no reranking.
 - Whether an `obsidian://` link opens when clicked has been unit-tested for format and not yet confirmed by a person on every platform.
+- The exact-words list reads a note's title, headings and text. An alias in a note's properties is found by meaning only.
+- Exact words mean exact: no word stems, and an accented letter stored as two characters does not match the same letter stored as one.
+- The exact-words list shows at most 3 passages. A name or code inside a long question may not reach it: put it in double quotes, or pass it as its own wording.
+- A quoted phrase built around one very common word can be missed in a large vault (at most 300 passages are checked per wording).
+- The exact-words table is checked in full by `status --verify`, not by plain `status`. `rebuild` makes it again.
+- One edit to a very long note (over a hundred passages) re-reads every passage of that note, which takes several seconds.
+
+### Not in this release
+
+- **Warm mode** (an optional helper that keeps the reading model loaded between searches). Not built yet. Nothing of it is in this release: no background process, no setting. Planned, off by default.
+- A release on the npm registry. Install from the GitHub tag for now.
+- An MCP server, a file watcher, more than one current vault.
 
 [Unreleased]: https://github.com/HeroForgeAI/vault-mirror/compare/v0.1.0...HEAD
 [0.1.0]: https://github.com/HeroForgeAI/vault-mirror/releases/tag/v0.1.0

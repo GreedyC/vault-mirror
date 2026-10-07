@@ -362,7 +362,7 @@ No. It uses a small reading model that runs on your computer. You don't need to 
 A few hundred notes take a few minutes. A very large vault of about two thousand notes took about seventeen minutes on a fast Mac. Later syncs read only what changed.
 
 **What in a note is read?**
-Only `.md` files. Links and embeds are turned into the words a reader would see, and aliases in a note's properties are searchable. Query blocks such as dataview and mermaid are dropped. Images, PDFs and `.canvas` files are counted and never read. The reading model was trained on English; other languages are not yet tested.
+Only `.md` files. Links and embeds are turned into the words a reader would see, and aliases in a note's properties are searchable by meaning. Query blocks such as dataview and mermaid are dropped. Images, PDFs and `.canvas` files are counted and never read. The reading model was trained on English; other languages are not yet tested.
 
 **Do I need Obsidian?**
 A vault is a folder of plain `.md` files, so the tool works on any such folder. The `obsidian://` links open once Obsidian has opened that folder as a vault.

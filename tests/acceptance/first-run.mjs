@@ -1,10 +1,10 @@
 #!/usr/bin/env node
-// The first ten minutes of a new member, on whatever system this runs on: the installed tool against a
+// The first ten minutes of a new user, on whatever system this runs on: the installed tool against a
 // small invented vault whose path has a space and whose notes have spaces and non-English letters.
 // It prints the real output of every command, with timings, and compares a checksum listing of the
 // vault after every command.
 //
-//   node tests/acceptance/member-smoke.mjs [--installed | --bin <path to a bin/vault-mirror.js>] [--default-home]
+//   node tests/acceptance/first-run.mjs [--installed | --bin <path to a bin/vault-mirror.js>] [--default-home]
 //
 // With no option it runs this checkout. --installed runs the copy that `npm install -g` put on this
 // computer (CI uses this). The index goes to a temp folder unless --default-home is given.
@@ -24,7 +24,7 @@ if (!fs.existsSync(BIN)) { console.error(`No vault-mirror at ${BIN}`); process.e
 
 const tmpBase = process.env.VAULT_MIRROR_TEST_TMP || os.tmpdir();
 fs.mkdirSync(tmpBase, { recursive: true });
-const base = fs.realpathSync.native(fs.mkdtempSync(path.join(tmpBase, 'vm member ')));
+const base = fs.realpathSync.native(fs.mkdtempSync(path.join(tmpBase, 'vm first run ')));
 const VAULT = path.join(base, 'My Vault');
 const PROJECT = path.join(base, 'my project');
 const OBS_JSON = path.join(base, 'obsidian.json');
@@ -86,7 +86,7 @@ function step(/** @type {string} */ name, /** @type {() => string | void} */ fn)
 }
 const must = (/** @type {any} */ cond, /** @type {string} */ message) => { if (!cond) throw new Error(message); };
 
-console.log(`vault-mirror member smoke test\n  system: ${process.platform} ${process.arch}, node ${process.version}, ${os.cpus().length} cores, ${(os.totalmem() / 2 ** 30).toFixed(0)} GB\n  tool:   ${BIN}\n  vault:  ${VAULT}\n  index:  ${HOME || '(the default home folder)'}`);
+console.log(`vault-mirror first-run test\n  system: ${process.platform} ${process.arch}, node ${process.version}, ${os.cpus().length} cores, ${(os.totalmem() / 2 ** 30).toFixed(0)} GB\n  tool:   ${BIN}\n  vault:  ${VAULT}\n  index:  ${HOME || '(the default home folder)'}`);
 
 step('version', () => { const r = vm(['--version']); must(r.status === 0, `exit ${r.status}`); return r.stdout.trim(); });
 
@@ -210,7 +210,7 @@ step('not one file in the vault changed', () => {
 });
 
 const failed = results.filter((r) => !r.ok);
-console.log(`\n${results.length - failed.length} of ${results.length} member steps passed on ${process.platform} (node ${process.version})${failed.length ? `; FAILED: ${failed.map((f) => f.name).join('; ')}` : ''}.`);
+console.log(`\n${results.length - failed.length} of ${results.length} first-run steps passed on ${process.platform} (node ${process.version})${failed.length ? `; FAILED: ${failed.map((f) => f.name).join('; ')}` : ''}.`);
 console.log(`Timings (ms): ${JSON.stringify(timings)}`);
 if (engineLine) console.log(`Versions: ${engineLine}`);
 if (!opt.keep) { try { fs.rmSync(base, { recursive: true, force: true }); } catch { console.log(`Could not remove ${base}`); } } else console.log(`Kept: ${base}`);

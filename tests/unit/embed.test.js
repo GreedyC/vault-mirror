@@ -50,7 +50,8 @@ test('shutdown runs after success and after a thrown error', async () => {
   assert.equal(lib2.calls.shutdown, 1, 'safe to call twice');
 });
 
-test('shutdown runs when a signal asks the work to stop', async () => {
+// Windows has no SIGHUP that one process can send to another (process.kill fails with ENOSYS), so there is nothing to send.
+test('shutdown runs when a signal asks the work to stop', { skip: process.platform === 'win32' ? 'Windows cannot send this signal to a process' : false }, async () => {
   const lib = fakeLib();
   const e = createEmbedder({ model: 'all-MiniLM-L6-v2', lib });
   let stop = false;

@@ -8,7 +8,7 @@ import { resolveSafe, isInside, vaultRootAbove, tildify, expandHome } from '../.
 import { configureWriter, writeFile } from '../../store/safe-write.js';
 import { walkVault, excludePath } from '../../vault/walk.js';
 import { lookupVault } from '../../vault/obsidian-registry.js';
-import { stat } from '../../vault/read-only-fs.js';
+import { stat, walk } from '../../vault/read-only-fs.js';
 import { RULE_BLOCK, RULE_START, RULE_END } from '../../rule-text.js';
 import { VmError } from '../../errors.js';
 import { plural } from '../output.js';
@@ -17,7 +17,17 @@ import { plural } from '../output.js';
 function templatesFolder(vaultReal) {
   try {
     const folder = JSON.parse(fs.readFileSync(path.join(vaultReal, '.obsidian', 'templates.json'), 'utf8')).folder;
-    if (typeof folder === 'string' && folder.trim() && stat(path.join(vaultReal, folder))?.isDir) return folder.replace(/^\/+|\/+$/g, '');
+    if (typeof folder !== 'string' || !folder.trim()) return null;
+    const named = folder.replace(/^\/+|\/+$/g, '');
+    if (stat(path.join(vaultReal, named))?.isDir) return named;
+    // On a disk that tells letter case apart, look for the folder the way the walk leaves it out: without regard to case.
+    let dir = vaultReal;
+    for (const seg of named.split('/')) {
+      const hit = walk(dir).find((e) => e.isDir && e.name.toLowerCase() === seg.toLowerCase());
+      if (!hit) return null;
+      dir = hit.abs;
+    }
+    return named;
   } catch { /* no templates plugin settings */ }
   return null;
 }

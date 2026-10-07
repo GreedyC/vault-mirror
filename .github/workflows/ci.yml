@@ -3,8 +3,11 @@ name: CI
 # test:        unit tests, type check and lint. They need no network and no reading model.
 #              macOS is the verified platform and decides the result. Linux and Windows run too,
 #              but are not verified yet, so a failure there is shown and does not fail the workflow.
-# acceptance:  the end-to-end script on macOS: the read-only checks, a kill -9 in the middle of a
-#              sync, two syncs racing. It downloads the reading model once and caches it.
+# acceptance:  the end-to-end script: the real commands (init, sync, search, status, rebuild, doctor)
+#              on the invented fixture vault, with a checksum of the vault compared after every
+#              command, a forced stop in the middle of a sync, and two syncs racing. It downloads the
+#              reading model once and caches it. It runs on macOS, Linux and Windows. None of the three
+#              is a required check yet.
 
 on:
   push:
@@ -52,13 +55,23 @@ jobs:
         run: npm run lint
 
   acceptance:
-    name: Acceptance, macOS, Node 22
-    runs-on: macos-latest
+    name: Acceptance, ${{ matrix.label }}, Node 22
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 30
-    # This job has not yet run on a hosted runner, and some of its steps have time limits that were
-    # set on a faster machine. Until it has one green run on record it reports without failing the
-    # workflow. Delete the next line after that run, so the badge covers it.
+    # These jobs are new on hosted runners, and some of their steps have time limits that were set
+    # on a faster machine. Until a system has one green run on record it reports without failing
+    # the workflow. Narrow the next line once it does, so the badge covers it.
     continue-on-error: true
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: macos-latest, label: macOS }
+          - { os: ubuntu-latest, label: Linux }
+          - { os: windows-latest, label: Windows }
+    defaults:
+      run:
+        shell: bash
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -70,7 +83,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.ruvector/models
-          key: reading-model-${{ hashFiles('src/embed/models.js') }}
+          key: reading-model-${{ runner.os }}-${{ hashFiles('src/embed/models.js') }}
       - run: npm ci
       - name: Doctor (loads the native engine; downloads the reading model on a cache miss)
         run: node bin/vault-mirror.js doctor
